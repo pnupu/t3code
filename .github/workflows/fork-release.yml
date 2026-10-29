@@ -1,0 +1,340 @@
+# Publishes pnupu/t3code releases that the desktop app, `t3 update`, and the
+# background service install from (see FORK.md). Upstream's release.yml needs
+# pingdotgg infrastructure, so this file stays fork-only and never conflicts.
+name: Fork release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_URL: https://github.com/pingdotgg/t3code.git
+
+jobs:
+  preflight:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      skip: ${{ steps.meta.outputs.skip }}
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      base: ${{ steps.meta.outputs.base }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - id: meta
+        name: Resolve the upstream base and the next fork version
+        run: |
+          set -euo pipefail
+          # Fork patch = upstream patch * 1000 + fork build, so every fork release sorts
+          # above the previous one and stays on the stable channel.
+          base=""
+          for tag in $(git ls-remote --tags --refs "$UPSTREAM_URL" | awk '{sub("refs/tags/","",$2); print $2}' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V -r | head -20); do
+            git fetch --no-tags -q "$UPSTREAM_URL" "refs/tags/$tag:refs/upstream/$tag"
+            if git merge-base --is-ancestor "refs/upstream/$tag" HEAD; then base="$tag"; break; fi
+          done
+          test -n "$base" || { echo "main is not based on an upstream stable tag." >&2; exit 1; }
+          IFS=. read -r major minor patch <<< "${base#v}"
+          start=$((patch * 1000))
+          last=$(git tag -l "v$major.$minor.*" | sed "s/^v$major\.$minor\.//" \
+            | awk -v s="$start" '/^[0-9]+$/ && $1 > s && $1 < s + 1000' | sort -n | tail -1)
+          if [[ -n "$last" && "$(git rev-parse "v$major.$minor.$last^{commit}")" == "$(git rev-parse HEAD)" ]]; then
+            echo "HEAD is already released as v$major.$minor.$last."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="$major.$minor.$(( ${last:-$start} + 1 ))"
+          {
+            echo "skip=false"
+            echo "base=$base"
+            echo "version=$version"
+            echo "tag=v$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $version on upstream $base."
+
+  check:
+    name: Typecheck and fork tests
+    needs: [preflight]
+    if: needs.preflight.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Typecheck
+        run: vp run typecheck
+
+      - name: Test what the fork changed
+        run: |
+          set -euo pipefail
+          base="${{ needs.preflight.outputs.base }}"
+          git fetch --no-tags -q "$UPSTREAM_URL" "refs/tags/$base:refs/upstream/$base"
+          tests=()
+          while IFS= read -r file; do
+            case "$file" in
+              *.browser.test.ts | *.browser.test.tsx) ;;
+              *.test.ts | *.test.tsx) [[ -f "$file" ]] && tests+=("$file") ;;
+              *.ts | *.tsx)
+                for candidate in "${file%.*}.test.ts" "${file%.*}.test.tsx"; do
+                  [[ -f "$candidate" ]] && tests+=("$candidate")
+                done
+                ;;
+            esac
+          done < <(git diff --name-only "refs/upstream/$base" HEAD)
+          if [[ ${#tests[@]} -eq 0 ]]; then
+            echo "No fork tests to run."
+            exit 0
+          fi
+          printf '%s\n' "${tests[@]}" | sort -u | xargs vp test run
+
+  build_cli:
+    name: Build CLI archive (linux-x64)
+    needs: [preflight]
+    if: needs.preflight.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      # T3 Connect public identifiers, not secrets (see .env.example).
+      - name: Load T3 Connect public config
+        run: grep -E '^T3CODE_' .env.example >> "$GITHUB_ENV"
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=t3...
+              - --filter=@t3tools/web...
+              - --filter=@t3tools/scripts...
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Align package versions
+        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      - name: Install native build libraries
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
+
+      - name: Build web client
+        run: vp run --filter @t3tools/web build
+
+      - name: Bundle server with web client
+        run: node apps/server/scripts/cli.ts build --verbose
+
+      - name: Build resource monitor
+        run: |
+          cargo build --locked --release \
+            --manifest-path native/resource-monitor/Cargo.toml \
+            --target x86_64-unknown-linux-gnu
+          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/linux-x64"
+          cp native/resource-monitor/target/x86_64-unknown-linux-gnu/release/t3-resource-monitor \
+            "$RUNNER_TEMP/cli-resource-monitor/linux-x64/t3-resource-monitor"
+
+      - name: Build CLI single-executable
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      - name: Build CLI archive
+        run: |
+          node scripts/build-cli-archive.ts \
+            --platform linux \
+            --arch x64 \
+            --version "${{ needs.preflight.outputs.version }}" \
+            --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
+            --output-dir release-cli
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli-linux-x64
+          path: release-cli/*
+          if-no-files-found: error
+
+  build_desktop:
+    name: Build ${{ matrix.label }}
+    needs: [preflight]
+    if: needs.preflight.outputs.skip == 'false'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            target: AppImage
+            arch: x64
+            rust_target: x86_64-unknown-linux-gnu
+          - label: macOS arm64
+            runner: macos-latest
+            platform: mac
+            target: dmg
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Load T3 Connect public config
+        run: grep -E '^T3CODE_' .env.example >> "$GITHUB_ENV"
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/desktop...
+              - --filter=t3...
+              - --filter=@t3tools/scripts...
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Align package versions
+        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      - name: Install Linux build libraries
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config imagemagick
+
+      - name: Build desktop artifact
+        run: |
+          vp run dist:desktop:artifact \
+            --platform "${{ matrix.platform }}" \
+            --target "${{ matrix.target }}" \
+            --arch "${{ matrix.arch }}" \
+            --build-version "${{ needs.preflight.outputs.version }}" \
+            --verbose
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-publish
+          shopt -s nullglob
+          for file in release/*.{dmg,zip,AppImage,deb,blockmap,yml}; do
+            [[ "$(basename "$file")" == builder-debug* ]] || cp "$file" release-publish/
+          done
+          if [[ "${{ matrix.platform }}" == "linux" ]] && ! compgen -G "release-publish/*.deb" >/dev/null; then
+            echo "Linux build did not produce a .deb." >&2
+            exit 1
+          fi
+
+      - name: Sign macOS app with the fork identity
+        if: matrix.platform == 'mac'
+        env:
+          MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        run: bash scripts/fork/resign-macos.sh release-publish
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-publish/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [preflight, check, build_cli, build_desktop]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Write checksums and notes
+        run: |
+          set -euo pipefail
+          (cd release-assets && sha256sum t3-* > SHA256SUMS)
+          base="${{ needs.preflight.outputs.base }}"
+          git fetch --no-tags -q "$UPSTREAM_URL" "refs/tags/$base:refs/upstream/$base"
+          {
+            echo "T3 Code $base from [upstream](https://github.com/pingdotgg/t3code/releases/tag/$base) with these fork changes:"
+            echo
+            git log --no-merges --format='- %s' "refs/upstream/$base..HEAD"
+          } > "$RUNNER_TEMP/notes.md"
+
+      # The tag keeps this commit reachable after the next sync rebases main.
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.preflight.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: T3 Code ${{ needs.preflight.outputs.version }}
+          body_path: ${{ runner.temp }}/notes.md
+          prerelease: false
+          make_latest: true
+          files: release-assets/*
+          fail_on_unmatched_files: true
+
+  report:
+    name: Report a failed release
+    needs: [preflight, check, build_cli, build_desktop, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh issue create --label fork-sync \
+            --title "Fork release failed on $(echo "$GITHUB_SHA" | cut -c1-10)" \
+            --body "Machines stay on the last release. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
