@@ -4,6 +4,7 @@ import {
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
+  pullRequestRepositoryHidden,
   withHiddenPullRequest,
   withoutHiddenPullRequest,
 } from "@t3tools/client-runtime/pull-request-feed";
@@ -18,6 +19,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { readLocalApi } from "~/localApi";
+import { useProjects } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { readEnvironmentScope } from "~/state/session";
 
@@ -54,6 +56,13 @@ export function usePullRequestFeed() {
 
   const ruleFor = (entry: { environmentId: EnvironmentId; projectId: ProjectId }) =>
     pullRequestFeedRule(settingsOf(entry.environmentId), entry.projectId);
+  const projects = useProjects();
+  // A repository one environment hides leaves every environment's copy, including carried rows.
+  const repositoryHidden = pullRequestRepositoryHidden(
+    projects,
+    (project) =>
+      ruleFor({ environmentId: project.environmentId, projectId: project.id }) === "hidden",
+  );
 
   /** Older servers drop these settings, and a standard pairing cannot write settings. */
   const canWrite = (environmentId: EnvironmentId) =>
@@ -87,17 +96,26 @@ export function usePullRequestFeed() {
       }),
     );
 
+  // Like Settings' project scope, every environment's copy of the repository gets the rule.
   const setProjectRule = (
     project: { environmentId: EnvironmentId; projectId: ProjectId },
     rule: PullRequestFeedRule,
-  ) =>
-    runPlan(environments, (current) =>
-      planProjectOverridePatch(
-        current,
-        { id: project.projectId, environmentId: project.environmentId },
-        { pullRequestFeed: rule },
+  ) => {
+    const repositoryKeyOf = (candidate: (typeof projects)[number] | undefined) =>
+      candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
+    const key = repositoryKeyOf(
+      projects.find(
+        (candidate) =>
+          candidate.environmentId === project.environmentId && candidate.id === project.projectId,
       ),
     );
+    const members = key
+      ? projects.filter((candidate) => repositoryKeyOf(candidate) === key)
+      : [{ id: project.projectId, environmentId: project.environmentId }];
+    runPlan(environments, (current) =>
+      planProjectOverridePatch(current, members, { pullRequestFeed: rule }),
+    );
+  };
 
   const openRowMenu = async (
     entry: EnvironmentPullRequestEntry,
@@ -155,5 +173,5 @@ export function usePullRequestFeed() {
 
   const canUnhide = (url: string) => holders(url).length > 0;
 
-  return { hidden, hiddenUrls, ruleFor, unhide, canUnhide, showRowMenu };
+  return { hidden, hiddenUrls, ruleFor, repositoryHidden, unhide, canUnhide, showRowMenu };
 }

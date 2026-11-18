@@ -617,8 +617,9 @@ export function PullRequestsPage() {
     (sentQuery.length === 0 ? baselineQuery.data : undefined) ??
     (loaded?.scope === scopeKey ? loaded.data : null) ??
     narrowed;
-  const listData = answered ?? carried;
-  const showingCarried = answered === null && carried !== null;
+  // With every project left out, nothing answers, so earlier rows must not stay on screen.
+  const listData = environmentQueries.length === 0 ? null : (answered ?? carried);
+  const showingCarried = answered === null && listData !== null;
   const loadingMore = listQuery.isPending && listData !== null;
   const firstLoad = listQuery.isPending && listData === null;
 
@@ -806,6 +807,7 @@ export function PullRequestsPage() {
       scopedToProject: scopedProjectId !== undefined,
       ruleFor: feed.ruleFor,
       hidden: feed.hidden,
+      repositoryHidden: feed.repositoryHidden,
       showHidden,
     },
   });
@@ -1296,7 +1298,12 @@ export function PullRequestsPage() {
             scopedProjectId !== undefined ||
             search.host !== undefined ||
             hiddenCount > 0 ||
-            ruledOutCount > 0
+            ruledOutCount > 0 ||
+            projects.some(
+              (project) =>
+                feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
+                "hidden",
+            )
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
