@@ -33,7 +33,7 @@ import {
   resolveThreadHttpQuotas,
 } from "./ThreadDetailsUsage.logic";
 
-const PACE_LABEL: Record<LimitPace, string> = {
+export const PACE_LABEL: Record<LimitPace, string> = {
   ahead: msg("Ahead of pace"),
   on: msg("On pace"),
   under: msg("Under pace"),
