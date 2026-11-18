@@ -439,35 +439,42 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     onValueChange={(value) => write({ removeAgentCreditsOnMerge: value })}
                   />
                 </SettingsSection>
-                <SettingsSection
-                  title={gt("Pull request feed")}
-                  footer={managedSubtitle(
-                    "pullRequestFeed",
-                    projectSelected
-                      ? gt("Which of this project's pull requests the combined Pull Requests list shows.")
-                      : gt(
+                {/* Older servers drop the rule. */}
+                {targets.every(
+                  (target) =>
+                    target.environment.serverConfig.environment.capabilities.pullRequestFeed ===
+                    true,
+                ) ? (
+                  <SettingsSection
+                    title={gt("Pull request feed")}
+                    footer={managedSubtitle(
+                      "pullRequestFeed",
+                      projectSelected
+                        ? gt("Which of this project's pull requests the combined Pull Requests list shows.")
+                        : gt(
                           "Which pull requests each project adds to the combined Pull Requests list. Projects can override it.",
                         ),
-                  )}
-                  trailing={
-                    pendingWrites === 0 && isMixed("pullRequestFeed") ? (
-                      <MixedValuesLabel projectSelected={projectSelected} />
-                    ) : null
-                  }
-                >
-                  {PULL_REQUEST_FEED_RULES.map((option, index) => (
-                    <SettingsChoiceRow
-                      key={option.value}
-                      label={option.label}
-                      selected={
-                        !isMixed("pullRequestFeed") && uniform("pullRequestFeed") === option.value
-                      }
-                      separated={index > 0}
-                      disabled={disabledFor("pullRequestFeed")}
-                      onPress={() => write({ pullRequestFeed: option.value })}
-                    />
-                  ))}
-                </SettingsSection>
+                    )}
+                    trailing={
+                      pendingWrites === 0 && isMixed("pullRequestFeed") ? (
+                        <MixedValuesLabel projectSelected={projectSelected} />
+                      ) : null
+                    }
+                  >
+                    {PULL_REQUEST_FEED_RULES.map((option, index) => (
+                      <SettingsChoiceRow
+                        key={option.value}
+                        label={option.label}
+                        selected={
+                          !isMixed("pullRequestFeed") && uniform("pullRequestFeed") === option.value
+                        }
+                        separated={index > 0}
+                        disabled={disabledFor("pullRequestFeed")}
+                        onPress={() => write({ pullRequestFeed: option.value })}
+                      />
+                    ))}
+                  </SettingsSection>
+                ) : null}
                 {projectSelected || feed.hiddenUrls.length === 0 ? null : (
                   <SettingsSection
                     title={gt("Hidden pull requests")}
@@ -484,6 +491,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                           label={link ? `${link.repository} #${link.number}` : url}
                           value={gt("Unhide")}
                           valuePosition="trailing"
+                          disabled={!feed.canUnhide(url)}
                           onPress={() => feed.unhide(url)}
                         />
                       );

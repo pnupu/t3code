@@ -113,6 +113,10 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const mixedAgentCredits = useScopedSettingsMixed(["removeAgentCreditsOnMerge"]);
   const mixedMergeMethod = useScopedSettingsMixed(["pullRequestMergeMethod"]);
   const mixedPullRequestFeed = useScopedSettingsMixed(["pullRequestFeed"]);
+  // Older servers drop the rule, so offer it only where every selected server stores it.
+  const pullRequestFeedSupported = connectedEnvironments.every(
+    (environment) => environment.serverConfig?.environment.capabilities.pullRequestFeed === true,
+  );
   const modelSource = useScopedSettingSource(["defaultModelSelection"]);
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const unavailable = connectedEnvironments.length === 0;
@@ -560,52 +564,54 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               </Select>
             }
           />
-          <SettingsRow
-            serverScoped
-            settingKeys={["pullRequestFeed"]}
-            mixed={mixedPullRequestFeed}
-            {...searchableSetting("pull-request-feed")}
-            description={
-              isProjectScope
-                ? "Which of this project's pull requests the combined Pull Requests list shows."
-                : "Which pull requests each project adds to the combined Pull Requests list. Projects can override it."
-            }
-            resetAction={
-              settings.pullRequestFeed !== DEFAULT_SERVER_SETTINGS.pullRequestFeed ? (
-                <SettingResetButton
-                  label="pull request feed"
-                  onClick={() =>
-                    updateSettings({ pullRequestFeed: DEFAULT_SERVER_SETTINGS.pullRequestFeed })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Select
-                value={mixedPullRequestFeed ? null : settings.pullRequestFeed}
-                onValueChange={(value) => {
-                  const rule = PULL_REQUEST_FEED_RULES.find((option) => option.value === value);
-                  if (rule) updateSettings({ pullRequestFeed: rule.value });
-                }}
-              >
-                <SelectTrigger size="sm" aria-label="Pull request feed">
-                  <SelectValue>
-                    {(value: string | null) =>
-                      PULL_REQUEST_FEED_RULES.find((option) => option.value === value)?.label ??
-                      "Mixed"
+          {pullRequestFeedSupported ? (
+            <SettingsRow
+              serverScoped
+              settingKeys={["pullRequestFeed"]}
+              mixed={mixedPullRequestFeed}
+              {...searchableSetting("pull-request-feed")}
+              description={
+                isProjectScope
+                  ? "Which of this project's pull requests the combined Pull Requests list shows."
+                  : "Which pull requests each project adds to the combined Pull Requests list. Projects can override it."
+              }
+              resetAction={
+                settings.pullRequestFeed !== DEFAULT_SERVER_SETTINGS.pullRequestFeed ? (
+                  <SettingResetButton
+                    ariaLabel={gt("Reset pull request feed to default")}
+                    onClick={() =>
+                      updateSettings({ pullRequestFeed: DEFAULT_SERVER_SETTINGS.pullRequestFeed })
                     }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  {PULL_REQUEST_FEED_RULES.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-            }
-          />
+                  />
+                ) : null
+              }
+              control={
+                <Select
+                  value={mixedPullRequestFeed ? null : settings.pullRequestFeed}
+                  onValueChange={(value) => {
+                    const rule = PULL_REQUEST_FEED_RULES.find((option) => option.value === value);
+                    if (rule) updateSettings({ pullRequestFeed: rule.value });
+                  }}
+                >
+                  <SelectTrigger size="sm" aria-label="Pull request feed">
+                    <SelectValue>
+                      {(value: string | null) =>
+                        PULL_REQUEST_FEED_RULES.find((option) => option.value === value)?.label ??
+                        "Mixed"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup align="end" alignItemWithTrigger={false}>
+                    {PULL_REQUEST_FEED_RULES.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+              }
+            />
+          ) : null}
         </>
       )}
     </SettingsSection>

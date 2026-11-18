@@ -177,6 +177,16 @@ describe("assignment query limits", () => {
     expect(
       pullRequestProjectQueries(projects, envs("env-1"), undefined, undefined, () => true),
     ).toEqual([]);
+    // Another environment's copy of the hidden repository must not take over its listing.
+    expect(
+      pullRequestProjectQueries(
+        [...projects, project("b2", "env-2", "x/b")],
+        envs("env-1", "env-2"),
+        undefined,
+        undefined,
+        (candidate) => candidate.id === "b",
+      ),
+    ).toEqual([{ environmentId: "env-1", projectIds: ["a"] }]);
   });
 });
 
