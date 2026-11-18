@@ -99,7 +99,8 @@ export interface PullRequestFeedOptions<Entry> {
   /** Rules apply only to the combined feed, not when the list shows one project. */
   readonly scopedToProject: boolean;
   readonly involvement: PullRequestInvolvement;
-  readonly ruleFor: (entry: Entry) => PullRequestFeedRule;
+  /** The rules of the row's copies; the row shows when any of them shows it. */
+  readonly rulesFor: (entry: Entry) => ReadonlyArray<PullRequestFeedRule>;
   readonly hidden: ReadonlySet<string>;
   /** The row's own group, when the list may file it under another one. */
   readonly groupOf?: (entry: Entry) => PullRequestFeedGroup;
@@ -122,13 +123,7 @@ export function pullRequestProjectHidesRepository(
  * Whether a row's repository is one some environment's project hides, matched on the projects'
  * repository keys like the web query assignment, so every environment's copy leaves the feed.
  */
-export function pullRequestRepositoryHidden<
-  Project extends {
-    readonly id: ProjectId;
-    readonly environmentId: string;
-    readonly repositoryIdentity?: { readonly canonicalKey?: string | undefined } | null | undefined;
-  },
->(
+export function pullRequestRepositoryHidden<Project extends RepositoryProject>(
   projects: ReadonlyArray<Project>,
   isHidden: (project: Project) => boolean,
 ): (entry: { readonly environmentId: string; readonly projectId: ProjectId }) => boolean {
@@ -147,6 +142,42 @@ export function pullRequestRepositoryHidden<
   };
 }
 
+type RepositoryProject = {
+  readonly id: ProjectId;
+  readonly environmentId: string;
+  readonly repositoryIdentity?: { readonly canonicalKey?: string | undefined } | null | undefined;
+};
+
+/**
+ * A row's own rule plus the rules of every counted copy of its repository, matched on the same
+ * repository key as `pullRequestRepositoryHidden`, so a row shows when any copy's rule allows it.
+ */
+export function pullRequestRepositoryRules<
+  Project extends RepositoryProject,
+  Entry extends { readonly environmentId: string; readonly projectId: ProjectId },
+>(
+  projects: ReadonlyArray<Project>,
+  ruleOf: (project: Project) => PullRequestFeedRule,
+  counts: (project: Project) => boolean,
+  ownRuleOf: (entry: Entry) => PullRequestFeedRule,
+): (entry: Entry) => ReadonlyArray<PullRequestFeedRule> {
+  const keys = new Map<string, string>();
+  const rules = new Map<string, PullRequestFeedRule[]>();
+  for (const project of projects) {
+    const key = project.repositoryIdentity?.canonicalKey?.toLowerCase();
+    if (!key) continue;
+    keys.set(`${project.environmentId} ${project.id}`, key);
+    if (!counts(project)) continue;
+    const held = rules.get(key);
+    if (held === undefined) rules.set(key, [ruleOf(project)]);
+    else held.push(ruleOf(project));
+  }
+  return (entry) => {
+    const key = keys.get(`${entry.environmentId} ${entry.projectId}`);
+    return [ownRuleOf(entry), ...(key === undefined ? [] : (rules.get(key) ?? []))];
+  };
+}
+
 /** `rule` drops the row silently; `hidden` is a row the user hid and can show again. */
 export function pullRequestFeedVisibility<Entry extends { readonly url: string }>(
   entry: Entry,
@@ -154,12 +185,16 @@ export function pullRequestFeedVisibility<Entry extends { readonly url: string }
   options: PullRequestFeedOptions<Entry>,
 ): "shown" | "rule" | "hidden" {
   if (!options.scopedToProject) {
-    const rule = options.ruleFor(entry);
+    const ownGroup = options.groupOf?.(entry);
     const admitted =
       options.repositoryHidden?.(entry) !== true &&
-      (pullRequestFeedShows(rule, group, options.involvement) ||
-        (options.groupOf !== undefined &&
-          pullRequestFeedShows(rule, options.groupOf(entry), options.involvement)));
+      options
+        .rulesFor(entry)
+        .some(
+          (rule) =>
+            pullRequestFeedShows(rule, group, options.involvement) ||
+            (ownGroup !== undefined && pullRequestFeedShows(rule, ownGroup, options.involvement)),
+        );
     if (!admitted) return "rule";
   }
   return isPullRequestHidden(options.hidden, entry.url) ? "hidden" : "shown";

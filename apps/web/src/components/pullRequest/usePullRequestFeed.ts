@@ -7,6 +7,7 @@ import {
   pullRequestFeedRule,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
+  pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   AuthSettingsWriteScope,
@@ -77,6 +78,13 @@ export function usePullRequestFeed() {
     );
   // A repository one environment hides leaves every environment's copy, including carried rows.
   const repositoryHidden = pullRequestRepositoryHidden(projects, hidesRepository);
+  // A row shows when any connected copy of its repository allows it, as on mobile.
+  const rulesFor = pullRequestRepositoryRules(
+    projects,
+    (project) => ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+    (project) => connected.has(project.environmentId),
+    ruleFor,
+  );
   // Every environment that holds the link hides it, so all of them must be able to clear it.
   const holders = (url: string) =>
     environments.filter((environment) =>
@@ -193,6 +201,7 @@ export function usePullRequestFeed() {
     hidden,
     hiddenUrls,
     ruleFor,
+    rulesFor,
     hidesRepository,
     repositoryHidden,
     unhide,
