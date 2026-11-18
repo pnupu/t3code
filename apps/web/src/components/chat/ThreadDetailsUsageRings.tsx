@@ -17,12 +17,12 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { PACE_LABEL } from "./ThreadDetailsUsage";
 
-// Activity-ring hues, deepened in light mode so they hold contrast on a white card.
+// Deeper in light mode so each ring holds contrast on a white card.
 const RING_COLORS = [
-  "text-[#e8104a] dark:text-[#fa114f]",
-  "text-[#5cb000] dark:text-[#a6ff00]",
-  "text-[#00a9c2] dark:text-[#00f0ff]",
-  "text-[#e69a00] dark:text-[#ffcc00]",
+  "text-[#2563eb] dark:text-[#60a5fa]",
+  "text-[#ea580c] dark:text-[#fb923c]",
+  "text-[#7c3aed] dark:text-[#a78bfa]",
+  "text-[#0d9488] dark:text-[#2dd4bf]",
 ] as const;
 
 const SIZE = 76;
