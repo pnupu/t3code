@@ -4,9 +4,8 @@ import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t
 import {
   filterPullRequestFeed,
   hiddenPullRequestList,
-  hiddenPullRequestRepositories,
   pullRequestFeedVisibility,
-  pullRequestRepositoryKey,
+  pullRequestRepositoryHidden,
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
@@ -106,22 +105,31 @@ describe("pull request feed rules", () => {
   });
 
   it("rules out every environment's copy of a repository one environment hides", () => {
-    const rows = [
-      { environmentId: "env-1", host: "github.com", repository: "X/A", url: "https://h/a/1" },
-      { environmentId: "env-2", host: "GitHub.com", repository: "x/a", url: "https://h/a/2" },
-      { environmentId: "env-2", host: "github.com", repository: "x/b", url: "https://h/b/3" },
-    ];
-    const hiddenRepositories = hiddenPullRequestRepositories(rows, (row) =>
-      row.environmentId === "env-1" ? "hidden" : "all",
+    const project = (environmentId: string, id: string, canonicalKey: string) => ({
+      id: ProjectId.make(id),
+      environmentId,
+      repositoryIdentity: { canonicalKey },
+    });
+    const repositoryHidden = pullRequestRepositoryHidden(
+      [
+        project("env-1", "a1", "github.com/X/A"),
+        project("env-2", "a2", "github.com/x/a"),
+        project("env-2", "b2", "github.com/x/b"),
+      ],
+      (candidate) => candidate.environmentId === "env-1" && candidate.id === "a1",
     );
     const options = {
       scopedToProject: false,
       involvement: "all" as const,
       ruleFor: () => "all" as const,
       hidden: new Set<string>(),
-      repositoryHidden: (row: (typeof rows)[number]) =>
-        hiddenRepositories.has(pullRequestRepositoryKey(row)),
+      repositoryHidden,
     };
+    const rows = [
+      { environmentId: "env-1", projectId: ProjectId.make("a1"), url: "https://h/a/1" },
+      { environmentId: "env-2", projectId: ProjectId.make("a2"), url: "https://h/a/2" },
+      { environmentId: "env-2", projectId: ProjectId.make("b2"), url: "https://h/b/3" },
+    ];
     expect(rows.map((row) => pullRequestFeedVisibility(row, "others", options))).toEqual([
       "rule",
       "rule",
