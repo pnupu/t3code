@@ -12,4 +12,19 @@ describe("a hide sent from this device", () => {
     expect(sentHiddenPullRequestApplies(saved, () => before)).toBe(true);
     expect(sentHiddenPullRequestApplies(saved, () => ({ hiddenPullRequests: {} }))).toBe(false);
   });
+
+  it("shows an unhide across two holders until both have pushed", () => {
+    const a = { hiddenPullRequests: {} };
+    const b = { hiddenPullRequests: {} };
+    const sent = {
+      url: null,
+      settledOver: new Map([
+        ["env-a", a],
+        ["env-b", b],
+      ]),
+    };
+    const pushed = (id: string) => (id === "env-a" ? { hiddenPullRequests: {} } : b);
+    expect(sentHiddenPullRequestApplies(sent, pushed)).toBe(true);
+    expect(sentHiddenPullRequestApplies(sent, () => ({ hiddenPullRequests: {} }))).toBe(false);
+  });
 });
