@@ -455,7 +455,7 @@ describe("evaluatePullRequestWatch", () => {
     );
   });
 
-  it("reports each failure at once, even while another check never finishes", () => {
+  it("reports each failure at once, and once more when the other checks finish", () => {
     const bot = check("CodeRabbit", "pending");
     const first = detail({ checks: [check("lint", "failure"), check("test", "pending"), bot] });
     const lint = evaluatePullRequestWatch(watch(), first, noRemarks);
@@ -465,6 +465,21 @@ describe("evaluatePullRequestWatch", () => {
     const second = detail({ checks: [check("lint", "failure"), check("test", "failure"), bot] });
     const test = evaluatePullRequestWatch(lint.next, second, noRemarks);
     assert.deepEqual(test.changes, [{ kind: "checks-failed", failed: [check("test", "failure")] }]);
+
+    // A review bot that passes after another check failed is still the result the agent waits on.
+    const reviewed = [
+      check("lint", "failure"),
+      check("test", "failure"),
+      check("CodeRabbit", "success"),
+    ];
+    const settled = evaluatePullRequestWatch(test.next, detail({ checks: reviewed }), noRemarks);
+    assert.deepEqual(settled.changes, [
+      { kind: "checks-finished", failed: [check("lint", "failure"), check("test", "failure")] },
+    ]);
+    assert.deepEqual(
+      evaluatePullRequestWatch(settled.next, detail({ checks: reviewed }), noRemarks).changes,
+      [],
+    );
 
     const rerun = evaluatePullRequestWatch(test.next, first, noRemarks);
     assert.equal(evaluatePullRequestWatch(rerun.next, second, noRemarks).changes.length, 1);
