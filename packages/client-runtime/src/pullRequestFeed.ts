@@ -1,9 +1,8 @@
-import {
-  HIDDEN_PULL_REQUESTS_LIMIT,
-  type ProjectId,
-  type PullRequestFeedRule,
-  type PullRequestInvolvement,
-  type ServerSettings,
+import type {
+  ProjectId,
+  PullRequestFeedRule,
+  PullRequestInvolvement,
+  ServerSettings,
 } from "@t3tools/contracts";
 
 export type PullRequestFeedSettings = Pick<
@@ -69,41 +68,22 @@ export function pullRequestFeedShows(
 
 type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefined;
 
-/** Every environment's hidden links, once each in their first spelling, oldest first. */
-export function hiddenPullRequestList(settings: Iterable<HiddenSettings>): ReadonlyArray<string> {
-  const urls = new Map<string, string>();
+/** The key a hidden link is stored under; hiding or unhiding patches only this key. */
+export const hiddenPullRequestKey = (url: string): string => url.toLowerCase();
+
+/** Every environment's hidden links, so a pull request stays hidden when another serves it. */
+export function hiddenPullRequestUrls(settings: Iterable<HiddenSettings>): ReadonlySet<string> {
+  const urls = new Set<string>();
   for (const entry of settings) {
-    for (const url of entry?.hiddenPullRequests ?? []) {
-      if (!urls.has(url.toLowerCase())) urls.set(url.toLowerCase(), url);
+    for (const url of Object.keys(entry?.hiddenPullRequests ?? {})) {
+      urls.add(hiddenPullRequestKey(url));
     }
   }
-  return [...urls.values()];
-}
-
-/** Every environment's hidden list counts, so a pull request stays hidden when another serves it. */
-export function hiddenPullRequestUrls(settings: Iterable<HiddenSettings>): ReadonlySet<string> {
-  return new Set(hiddenPullRequestList(settings).map((url) => url.toLowerCase()));
+  return urls;
 }
 
 export function isPullRequestHidden(hidden: ReadonlySet<string>, url: string): boolean {
-  return hidden.size > 0 && hidden.has(url.toLowerCase());
-}
-
-/** The oldest entries fall off at the limit, so hiding always succeeds. */
-export function withHiddenPullRequest(
-  hidden: ReadonlyArray<string>,
-  url: string,
-): ReadonlyArray<string> {
-  const kept = withoutHiddenPullRequest(hidden, url);
-  return [...kept, url].slice(-HIDDEN_PULL_REQUESTS_LIMIT);
-}
-
-export function withoutHiddenPullRequest(
-  hidden: ReadonlyArray<string>,
-  url: string,
-): ReadonlyArray<string> {
-  const key = url.toLowerCase();
-  return hidden.filter((entry) => entry.toLowerCase() !== key);
+  return hidden.size > 0 && hidden.has(hiddenPullRequestKey(url));
 }
 
 export interface PullRequestFeedOptions<Entry> {
@@ -119,14 +99,14 @@ export interface PullRequestFeedOptions<Entry> {
 }
 
 /**
- * Whether a project's `hidden` rule removes its repository from every environment's list. Only an
- * environment this client reaches and can write counts, so the user can always undo the rule.
+ * Whether a project's `hidden` rule removes its repository from every environment's list. Only a
+ * connected environment counts, so an offline one's cached rule cannot trap the repository.
  */
 export function pullRequestProjectHidesRepository(
   rule: PullRequestFeedRule,
-  environment: { readonly connected: boolean; readonly writable: boolean },
+  environment: { readonly connected: boolean },
 ): boolean {
-  return rule === "hidden" && environment.connected && environment.writable;
+  return rule === "hidden" && environment.connected;
 }
 
 /**

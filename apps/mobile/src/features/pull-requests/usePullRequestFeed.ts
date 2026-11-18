@@ -1,63 +1,36 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
-  hiddenPullRequestList,
+  hiddenPullRequestKey,
   hiddenPullRequestUrls,
   isPullRequestHidden,
   pullRequestFeedRule,
   pullRequestProjectHidesRepository,
-  withHiddenPullRequest,
-  withoutHiddenPullRequest,
 } from "@t3tools/client-runtime/pull-request-feed";
 import { AuthSettingsWriteScope, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
-import { useState } from "react";
 
 import { readEnvironmentScope } from "../../state/session";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useSettingsWriter } from "../settings/useSettingsWriter";
-import {
-  chainHiddenSave,
-  settledHiddenSaves,
-  shownHiddenList,
-  type PendingHiddenList,
-} from "./pendingHiddenPullRequests";
 
 /** Per-project feed rules and hidden pull requests, read from every environment's settings. */
 export function usePullRequestFeed() {
   const configs = useAtomValue(environmentServerConfigsAtom);
+  const environments = useWorkspaceEnvironments();
   const writeSettings = useSettingsWriter();
-  const [pending, setPending] = useState<ReadonlyMap<EnvironmentId, PendingHiddenList>>(
-    () => new Map(),
-  );
-  const storedOf = (environmentId: EnvironmentId) =>
-    configs.get(environmentId)?.settings.hiddenPullRequests ?? [];
-  const settled = settledHiddenSaves(pending, storedOf);
-  if (settled.length > 0) {
-    setPending((current) => {
-      const updated = new Map(current);
-      for (const environmentId of settled) updated.delete(environmentId);
-      return updated;
-    });
-  }
-  const hiddenOf = (environmentId: EnvironmentId) =>
-    shownHiddenList(storedOf(environmentId), pending.get(environmentId));
-  const lists = [...configs.keys()].map((environmentId) => ({
-    hiddenPullRequests: hiddenOf(environmentId),
-  }));
-  const hidden = hiddenPullRequestUrls(lists);
-  const hiddenUrls = hiddenPullRequestList(lists);
+  const hidden = hiddenPullRequestUrls([...configs.values()].map((config) => config.settings));
+  const hiddenUrls = [...hidden];
 
   const ruleFor = (entry: {
     readonly environmentId: EnvironmentId;
     readonly projectId: ProjectId;
   }) => pullRequestFeedRule(configs.get(entry.environmentId)?.settings, entry.projectId);
 
-  /** Older servers drop the list, and a standard pairing cannot write settings. */
+  /** Older servers drop the setting, and a standard pairing cannot write settings. */
   const canHide = (environmentId: EnvironmentId) =>
     configs.get(environmentId)?.environment.capabilities.pullRequestFeed === true &&
     readEnvironmentScope(environmentId, AuthSettingsWriteScope);
 
-  const environments = useWorkspaceEnvironments();
   /** The one rule for which projects hide their repository, the same as on web. */
   const hidesRepository = (project: {
     readonly environmentId: EnvironmentId;
@@ -74,71 +47,44 @@ export function usePullRequestFeed() {
               environment.environmentId === project.environmentId &&
               environment.connectionState === "connected",
           ),
-        writable: canHide(project.environmentId),
       },
     );
 
-  const write = (next: ReadonlyMap<EnvironmentId, ReadonlyArray<string>>) => {
-    if (next.size === 0) return;
-    setPending((current) => {
-      const updated = new Map(current);
-      for (const [environmentId, list] of next)
-        updated.set(
-          environmentId,
-          chainHiddenSave(list, storedOf(environmentId), current.get(environmentId)),
-        );
-      return updated;
-    });
-    void writeSettings(
-      [],
-      [...next].map(([environmentId, hiddenPullRequests]) => ({
-        environmentId,
-        patch: { hiddenPullRequests },
-      })),
-    )
-      // A rejected write saved nothing either.
-      .catch(() => [...next.keys()])
-      .then((failed) =>
-        setPending((current) => {
-          const updated = new Map(current);
-          for (const [environmentId, list] of next) {
-            if (failed.includes(environmentId) && updated.get(environmentId)?.list === list)
-              updated.delete(environmentId);
-          }
-          return updated;
-        }),
-      );
-  };
-
+  // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const hide = (entry: { readonly environmentId: EnvironmentId; readonly url: string }) => {
     if (!canHide(entry.environmentId)) return;
-    write(
-      new Map([
-        [entry.environmentId, withHiddenPullRequest(hiddenOf(entry.environmentId), entry.url)],
-      ]),
+    const key = hiddenPullRequestKey(entry.url);
+    void writeSettings(
+      [],
+      [
+        {
+          environmentId: entry.environmentId,
+          patch: { hiddenPullRequests: { [key]: true } },
+        },
+      ],
     );
   };
 
   const holders = (url: string) =>
-    [...configs.keys()].filter(
-      (environmentId) =>
-        canHide(environmentId) &&
-        isPullRequestHidden(
-          hiddenPullRequestUrls([{ hiddenPullRequests: hiddenOf(environmentId) }]),
-          url,
-        ),
+    [...configs].flatMap(([environmentId, config]) =>
+      canHide(environmentId) && isPullRequestHidden(hiddenPullRequestUrls([config.settings]), url)
+        ? [environmentId]
+        : [],
     );
 
   // Every environment that holds the link hides it, so unhiding clears them all.
-  const unhide = (url: string) =>
-    write(
-      new Map(
-        holders(url).map((environmentId) => [
-          environmentId,
-          withoutHiddenPullRequest(hiddenOf(environmentId), url),
-        ]),
-      ),
+  const unhide = (url: string) => {
+    const environmentIds = holders(url);
+    if (environmentIds.length === 0) return;
+    const key = hiddenPullRequestKey(url);
+    void writeSettings(
+      [],
+      environmentIds.map((environmentId) => ({
+        environmentId,
+        patch: { hiddenPullRequests: { [key]: null } },
+      })),
     );
+  };
 
   const canUnhide = (url: string) => holders(url).length > 0;
 
