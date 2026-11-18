@@ -695,6 +695,43 @@ describe("the priority groups against a paginated feed", () => {
       groups.find((group) => group.key === "others")?.entries.map((row) => row.number),
     ).toEqual([6123]);
   });
+
+  it("applies each project's feed rule and keeps the flat rows to what the groups show", () => {
+    const mine = authoredRow(1, "2026-08-11T08:00:00Z");
+    const theirs = entry({ number: 2, updatedAt: "2026-08-11T09:00:00Z" });
+    const other = entry({ number: 3, projectId: "project-2" as ProjectId });
+    const hiddenRow = entry({ number: 4, projectId: "project-2" as ProjectId });
+    const groupsFor = (scopedToProject: boolean) =>
+      pullRequestGroups({
+        known: [mine, theirs, other, hiddenRow],
+        baseline: undefined,
+        providers: [],
+        viewers: VIEWERS,
+        involvement: "all",
+        localFilters: {},
+        hasLocalFilters: false,
+        text: "",
+        answeredLocally: false,
+        baselineEmpty: true,
+        held: undefined,
+        authored: undefined,
+        reviewing: undefined,
+        partitionsWanted: false,
+        feed: {
+          scopedToProject,
+          ruleFor: (row) => (row.projectId === "project-1" ? "authored" : "all"),
+          hidden: new Set([hiddenRow.url]),
+          showHidden: false,
+        },
+      });
+
+    const combined = groupsFor(false);
+    expect(combined.entries.map((row) => row.number)).toEqual([1, 3]);
+    expect(combined.groups.map((group) => group.key)).toEqual(["authored", "others"]);
+    expect(combined.hiddenCount).toBe(1);
+    expect(combined.heldPullRequestsBySurface.size).toBe(2);
+    expect(groupsFor(true).entries.map((row) => row.number)).toEqual([2, 1, 3]);
+  });
 });
 
 describe("pull request list overrides", () => {

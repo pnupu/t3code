@@ -181,12 +181,14 @@ export function pullRequestProjectQueries(
   environmentIds: ReadonlyArray<EnvironmentId>,
   hostAvailability?: PullRequestHostAvailability,
   unreachableEnvironmentIds?: ReadonlySet<EnvironmentId>,
+  /** Projects the feed leaves out entirely; their environment then lists the rest by id. */
+  excluded?: (project: AssignableProject) => boolean,
 ): ReadonlyArray<{
   readonly environmentId: EnvironmentId;
   readonly projectIds?: ReadonlyArray<ProjectId>;
 }> {
   const assignment = assignProjectsToEnvironments(
-    projects,
+    excluded === undefined ? projects : projects.filter((project) => !excluded(project)),
     environmentIds,
     environmentIds[0],
     hostAvailability,

@@ -291,6 +291,20 @@ PR creation from Git actions continue to use the project's environment.
 For Azure DevOps, use the host website to change comments. Bitbucket does not support reopening a
 declined pull request.
 
+### Choose what the list shows
+
+When the list shows all projects, each project adds pull requests by its **Pull request feed**
+rule: **All pull requests**, **Waiting on me** (your review is requested), **Authored by me**, or
+**Hidden**. Set the default in Settings → Source control, and override it for a project with the
+project selector there. On web and desktop you can also right-click a pull request and choose a
+rule for its project. Picking one project in the list's project filter shows all its pull
+requests.
+
+To hide one pull request, right-click it on web and desktop, or touch and hold it on mobile, and
+choose **Hide from feed**. Hidden pull requests leave every list. Press **Show N hidden** in the
+list to see them again, then choose **Show in feed** to unhide one. You can also unhide them in
+Settings → Diffs & pull requests on web and desktop, or Settings → Source control on mobile.
+
 ### Review guides
 
 Review guides are in beta. Turn on **Review guides** in Settings → Source control & issues to add the
