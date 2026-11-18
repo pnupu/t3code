@@ -4,6 +4,7 @@ import {
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
+  pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
   withHiddenPullRequest,
   withoutHiddenPullRequest,
@@ -59,25 +60,27 @@ export function usePullRequestFeed() {
   const ruleFor = (entry: { environmentId: EnvironmentId; projectId: ProjectId }) =>
     pullRequestFeedRule(settingsOf(entry.environmentId), entry.projectId);
   const projects = useProjects();
-  // A repository one environment hides leaves every environment's copy, including carried rows.
-  // Only connected environments count, so a rule this client cannot change cannot trap it.
-  const connected = new Set(
-    environments.flatMap((environment) =>
-      isConnectedWithConfig(environment) ? [environment.environmentId] : [],
-    ),
-  );
-  const repositoryHidden = pullRequestRepositoryHidden(
-    projects,
-    (project) =>
-      connected.has(project.environmentId) &&
-      ruleFor({ environmentId: project.environmentId, projectId: project.id }) === "hidden",
-  );
-
   /** Older servers drop these settings, and a standard pairing cannot write settings. */
   const canWrite = (environmentId: EnvironmentId) =>
     environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
       ?.environment.capabilities.pullRequestFeed === true &&
     readEnvironmentScope(environmentId, AuthSettingsWriteScope);
+  const connected = new Set(
+    environments.flatMap((environment) =>
+      isConnectedWithConfig(environment) ? [environment.environmentId] : [],
+    ),
+  );
+  /** The one rule for which projects hide their repository, shared by queries and rows. */
+  const hidesRepository = (project: { environmentId: EnvironmentId; id: ProjectId }) =>
+    pullRequestProjectHidesRepository(
+      ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+      {
+        connected: connected.has(project.environmentId),
+        writable: canWrite(project.environmentId),
+      },
+    );
+  // A repository one environment hides leaves every environment's copy, including carried rows.
+  const repositoryHidden = pullRequestRepositoryHidden(projects, hidesRepository);
   const holders = (url: string) =>
     environments.filter(
       (environment) =>
@@ -185,5 +188,14 @@ export function usePullRequestFeed() {
 
   const canUnhide = (url: string) => holders(url).length > 0;
 
-  return { hidden, hiddenUrls, ruleFor, repositoryHidden, unhide, canUnhide, showRowMenu };
+  return {
+    hidden,
+    hiddenUrls,
+    ruleFor,
+    hidesRepository,
+    repositoryHidden,
+    unhide,
+    canUnhide,
+    showRowMenu,
+  };
 }
