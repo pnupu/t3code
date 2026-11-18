@@ -13,9 +13,10 @@ import { useState } from "react";
 
 import { readEnvironmentScope } from "../../state/session";
 import { environmentServerConfigsAtom } from "../../state/server";
-import { useWorkspaceState } from "../../state/workspace";
+import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useSettingsWriter } from "../settings/useSettingsWriter";
 import {
+  chainHiddenSave,
   settledHiddenSaves,
   shownHiddenList,
   type PendingHiddenList,
@@ -56,7 +57,7 @@ export function usePullRequestFeed() {
     configs.get(environmentId)?.environment.capabilities.pullRequestFeed === true &&
     readEnvironmentScope(environmentId, AuthSettingsWriteScope);
 
-  const { environments } = useWorkspaceState();
+  const environments = useWorkspaceEnvironments();
   /** The one rule for which projects hide their repository, the same as on web. */
   const hidesRepository = (project: {
     readonly environmentId: EnvironmentId;
@@ -65,11 +66,14 @@ export function usePullRequestFeed() {
     pullRequestProjectHidesRepository(
       ruleFor({ environmentId: project.environmentId, projectId: project.id }),
       {
-        connected: environments.some(
-          (environment) =>
-            environment.environmentId === project.environmentId &&
-            environment.connectionState === "connected",
-        ),
+        // As on web: connected, with its server config.
+        connected:
+          configs.has(project.environmentId) &&
+          environments.some(
+            (environment) =>
+              environment.environmentId === project.environmentId &&
+              environment.connectionState === "connected",
+          ),
         writable: canHide(project.environmentId),
       },
     );
@@ -79,10 +83,10 @@ export function usePullRequestFeed() {
     setPending((current) => {
       const updated = new Map(current);
       for (const [environmentId, list] of next)
-        updated.set(environmentId, {
-          list,
-          sentOver: current.get(environmentId)?.sentOver ?? storedOf(environmentId),
-        });
+        updated.set(
+          environmentId,
+          chainHiddenSave(list, storedOf(environmentId), current.get(environmentId)),
+        );
       return updated;
     });
     void writeSettings(
