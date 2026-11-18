@@ -76,7 +76,8 @@ export function evaluatePullRequestWatch(
   const failed = checks.filter(isFailedCheck);
   const awaiting = checks.filter((check) => check.status === "action-required");
   if (checks.length > 0) {
-    const pendingBefore = checksPending;
+    // An approval hold is unfinished work too, though it does not keep checks pending.
+    const pendingBefore = checksPending || awaitingApproval.length > 0;
     // A run awaiting approval waits on a person, like a review, so only running checks count.
     checksPending = checks.some((check) => check.status === "pending");
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
