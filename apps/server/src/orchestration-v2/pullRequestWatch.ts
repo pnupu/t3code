@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-/** Bounds consecutive comment-only wakes to stop bot reply loops; check, conflict, or push news resets it. */
+/** Bounds consecutive comment wakes to stop bot reply loops; check, conflict, or push news resets it. */
 export const PULL_REQUEST_WATCH_WAKE_LIMIT = 10;
 /** How long a head may go without any check before the agent is told none reported. */
 export const PULL_REQUEST_WATCH_NO_CHECKS_MS = 15 * 60_000;
@@ -16,7 +16,11 @@ const SNIPPET_LENGTH = 200;
 
 export type PullRequestWatchChange =
   | { readonly kind: "checks-failed"; readonly failed: ReadonlyArray<PullRequestCheck> }
-  | { readonly kind: "checks-finished"; readonly failed: ReadonlyArray<PullRequestCheck> }
+  | {
+      readonly kind: "checks-finished";
+      readonly failed: ReadonlyArray<PullRequestCheck>;
+      readonly approvalUnknown?: true;
+    }
   | { readonly kind: "checks-passed"; readonly count: number; readonly required: boolean }
   | { readonly kind: "checks-awaiting-approval"; readonly checks: ReadonlyArray<PullRequestCheck> }
   | { readonly kind: "remarks"; readonly remarks: ReadonlyArray<PullRequestComment> }
@@ -66,6 +70,7 @@ export function evaluatePullRequestWatch(
   let passedChecks = headMoved ? [] : watch.passedChecks;
   let owedChecks = headMoved ? [] : (watch.owedChecks ?? []);
   let awaitingApproval = headMoved ? [] : (watch.awaitingApproval ?? []);
+  let finishedChecks = headMoved ? [] : watch.finishedChecks;
   let approvalAnnounced = headMoved ? false : (watch.approvalAnnounced ?? false);
   // A watch with no answer (saved before the field, or since a push) waits only while the clock
   // below runs.
@@ -76,8 +81,7 @@ export function evaluatePullRequestWatch(
   const failed = checks.filter(isFailedCheck);
   const awaiting = checks.filter((check) => check.status === "action-required");
   if (checks.length > 0) {
-    // An approval hold is unfinished work too, though it does not keep checks pending.
-    const pendingBefore = checksPending || awaitingApproval.length > 0;
+    const unfinishedBefore = checksPending || awaitingApproval.length > 0;
     // A run awaiting approval waits on a person, like a review, so only running checks count.
     checksPending = checks.some((check) => check.status === "pending");
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
@@ -120,17 +124,32 @@ export function evaluatePullRequestWatch(
           (workflowRunOf(key) === key ? !finished.has(key) : nameUnfinished(key)),
       ),
     ];
-    // A failure keeps the gate from passing, so the other checks finishing is news of its own.
+    // A failure keeps the gate from passing, so the rest finishing is news of its own. Names catch
+    // a check first seen finished, or a pending answer a push elsewhere dropped.
+    const finishedNow =
+      failed.length === 0
+        ? []
+        : [
+            ...new Set(
+              checks
+                .filter((check) => check.status !== "pending" && check.status !== "action-required")
+                .map((check) => check.name),
+            ),
+          ];
+    const finishedGrew =
+      finishedChecks !== undefined && finishedNow.some((name) => !finishedChecks?.includes(name));
     if (
       !checksBaseline &&
       newlyFailed.length === 0 &&
       failed.length > 0 &&
-      pendingBefore &&
       !checksPending &&
-      awaitingApproval.length === 0
+      awaitingApproval.length === 0 &&
+      (unfinishedBefore || finishedGrew)
     ) {
-      changes.push({ kind: "checks-finished", failed });
+      changes.push({ kind: "checks-finished", failed, ...(unread && { approvalUnknown: true }) });
     }
+    // An approval hold keeps the list, so checks that finish behind it are still news after it.
+    if (awaitingApproval.length === 0) finishedChecks = finishedNow;
   }
   const required = checks.filter((check) => check.required === true);
   const gate = required.length > 0 ? required : checks;
@@ -243,8 +262,11 @@ export function evaluatePullRequestWatch(
   // Null records an empty baseline; historical IDs are saved without waking the watch.
   const mergeQueueRemovalId = removal?.id ?? watch.mergeQueueRemovalId ?? null;
 
-  const commentsOnly = changes.length > 0 && changes.every((change) => change.kind === "remarks");
-  const progress = headMoved || (changes.length > 0 && !commentsOnly);
+  // A bot that reruns its check with each comment must not reset the limit.
+  const churn = (change: PullRequestWatchChange) =>
+    change.kind === "remarks" || change.kind === "checks-finished";
+  const commentsOnly = changes.some((change) => change.kind === "remarks") && changes.every(churn);
+  const progress = headMoved || !changes.every(churn);
   const wakes = (progress ? 0 : watch.wakes) + (commentsOnly ? 1 : 0);
   return {
     changes,
@@ -256,6 +278,7 @@ export function evaluatePullRequestWatch(
       passedChecks,
       owedChecks,
       awaitingApproval,
+      ...(finishedChecks !== undefined && { finishedChecks }),
       approvalAnnounced,
       remarksThrough,
       remarkIds,
@@ -377,8 +400,11 @@ function changeLines(
       return [`- Checks failed${context.commit}:`, ...listed(change.failed, failedCheckLine)];
     case "checks-finished":
       return [
-        `- All checks finished${context.commit}, and these failed:`,
+        `- No checks are running${context.commit} any more, and these failed:`,
         ...listed(change.failed, failedCheckLine),
+        ...(change.approvalUnknown
+          ? ["  Whether workflows await a maintainer's approval could not be read."]
+          : []),
       ];
     case "checks-awaiting-approval":
       return [
