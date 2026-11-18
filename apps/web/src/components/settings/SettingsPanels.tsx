@@ -1778,7 +1778,7 @@ export function DiffsSettingsPanel() {
 }
 
 function HiddenPullRequestsSetting() {
-  const { hiddenUrls, unhide, canUnhide } = usePullRequestFeed();
+  const { hiddenUrls, unhide, canUnhide, unhideBlockedBy } = usePullRequestFeed();
   const searchableSetting = useSearchableSetting();
   return (
     <SettingsRow
@@ -1797,6 +1797,7 @@ function HiddenPullRequestsSetting() {
               <li key={url} className="flex items-center justify-between gap-3 text-xs">
                 <span className="min-w-0 truncate text-muted-foreground">
                   {link ? `${link.repository} #${link.number}` : url}
+                  {unhideBlockedBy(url) === null ? null : ` · Hidden by ${unhideBlockedBy(url)}`}
                 </span>
                 <Button
                   size="xs"

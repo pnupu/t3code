@@ -219,6 +219,8 @@ export function PullRequestsScreen(
     ),
   );
   const hiddenCount = visibilities.filter((visibility) => visibility === "hidden").length;
+  // With nothing hidden left the toggle is gone, so the next hide must not stay shown.
+  if (showHidden && hiddenCount === 0) setShowHidden(false);
   const feedEntries = entries.filter(
     (_, index) =>
       visibilities[index] === "shown" || (visibilities[index] === "hidden" && showHidden),
@@ -299,7 +301,17 @@ export function PullRequestsScreen(
         ...(isPullRequestHidden(feed.hidden, entry.url)
           ? feed.canUnhide(entry.url)
             ? [{ id: "unhide", title: "Show in feed", image: "eye" }]
-            : []
+            : feed.unhideBlockedBy(entry.url) === null
+              ? []
+              : [
+                  {
+                    id: "unhide",
+                    title: "Show in feed",
+                    subtitle: `Hidden by ${feed.unhideBlockedBy(entry.url)}`,
+                    image: "eye",
+                    attributes: { disabled: true },
+                  },
+                ]
           : feed.canHide(entry.environmentId)
             ? [{ id: "hide", title: "Hide from feed", image: "eye.slash" }]
             : []),
