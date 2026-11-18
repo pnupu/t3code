@@ -210,6 +210,7 @@ describe("bitbucketProviderFailure", () => {
       status,
       responseBodyLength: 0,
       anonymous,
+      retryAt: 1_000,
     });
 
   it("treats only an HTTP 401 as unusable credentials", () => {
@@ -219,11 +220,19 @@ describe("bitbucketProviderFailure", () => {
     expect(bitbucketProviderFailure(responseError(429)).reason).toBe("rate-limited");
   });
 
-  it("blames the missing credential when Bitbucket refuses an anonymous request", () => {
-    for (const status of [401, 403, 404, 429]) {
-      expect(bitbucketProviderFailure(responseError(status, true)).reason).toBe("missing-tool");
-    }
-    expect(bitbucketProviderFailure(responseError(500, true)).reason).toBe("failed");
+  it("names the missing credential when Bitbucket refuses an anonymous request", () => {
+    const hint = BitbucketApi.ANONYMOUS_REQUEST_HINT;
+    expect(bitbucketProviderFailure(responseError(404, true))).toEqual({
+      reason: "not-found",
+      accessHint: hint,
+    });
+    expect(bitbucketProviderFailure(responseError(429, true))).toEqual({
+      reason: "rate-limited",
+      retryAt: 1_000,
+    });
+    expect(responseError(429, true).detail).toBe(`Bitbucket returned HTTP 429. ${hint}`);
+    expect(responseError(429).detail).toBe("Bitbucket returned HTTP 429.");
+    expect(responseError(500, true).detail).toBe("Bitbucket returned HTTP 500.");
   });
 
   it("reports a request held back by the host-wide pause as rate limited until it ends", () => {

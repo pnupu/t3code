@@ -115,6 +115,17 @@ export class BitbucketRequestError extends Schema.TaggedError<BitbucketRequestEr
   }
 }
 
+/** Why Bitbucket refused a request that went out without a credential. */
+export const ANONYMOUS_REQUEST_HINT =
+  "The server sent it without a Bitbucket credential, which can't read private repositories and has a low hourly limit. Add one in Settings → Source Control.";
+
+function responseDetail(status: number, anonymous: boolean | undefined): string {
+  const detail = `Bitbucket returned HTTP ${status}.`;
+  return anonymous === true && [401, 403, 404, 429].includes(status)
+    ? `${detail} ${ANONYMOUS_REQUEST_HINT}`
+    : detail;
+}
+
 export class BitbucketResponseError extends Schema.TaggedError<BitbucketResponseError>()(
   "BitbucketResponseError",
   {
@@ -127,7 +138,7 @@ export class BitbucketResponseError extends Schema.TaggedError<BitbucketResponse
   },
 ) {
   get detail(): string {
-    return `Bitbucket returned HTTP ${this.status}.`;
+    return responseDetail(this.status, this.anonymous);
   }
 
   override get message(): string {
@@ -146,7 +157,7 @@ export class BitbucketResponseBodyReadError extends Schema.TaggedError<Bitbucket
   },
 ) {
   get detail(): string {
-    return `Bitbucket returned HTTP ${this.status}.`;
+    return responseDetail(this.status, this.anonymous);
   }
 
   override get message(): string {

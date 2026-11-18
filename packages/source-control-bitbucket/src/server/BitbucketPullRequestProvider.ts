@@ -63,14 +63,6 @@ export function bitbucketViewerPermissions(input: {
 export function bitbucketProviderFailure(
   error: BitbucketPullRequestApi.BitbucketPullRequestApiError,
 ): PullRequestProviderFailure {
-  // Anonymous reads serve public repositories; Bitbucket refuses a private one with 404, then 429.
-  if (
-    (error._tag === "BitbucketResponseError" || error._tag === "BitbucketResponseBodyReadError") &&
-    error.anonymous === true &&
-    [401, 403, 404, 429].includes(error.status)
-  ) {
-    return { reason: "missing-tool" };
-  }
   if (
     (error._tag === "BitbucketResponseError" && error.status === 401) ||
     error._tag === "SettingsSecretUnresolvedError"
@@ -93,7 +85,10 @@ export function bitbucketProviderFailure(
     (error._tag === "BitbucketResponseError" || error._tag === "BitbucketResponseBodyReadError") &&
     error.status === 404
   ) {
-    return { reason: "not-found" };
+    // Anonymous reads serve public repositories; Bitbucket answers a private one with 404.
+    return error.anonymous === true
+      ? { reason: "not-found", accessHint: BitbucketApi.ANONYMOUS_REQUEST_HINT }
+      : { reason: "not-found" };
   }
   return { reason: "failed" };
 }
