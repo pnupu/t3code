@@ -798,8 +798,8 @@ export function PullRequestsPage() {
     },
   });
 
-  // With nothing hidden left the toggle is gone, so the next hide must not stay shown.
-  if (showHidden && hiddenCount === 0) setShowHidden(false);
+  // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
+  if (showHidden && feed.hidden.size === 0) setShowHidden(false);
 
   const visibleStatsKeys = useRef({ key: filterKey, values: new Set<string>() });
   const [statsByRow, setStatsByRow] = useState<PullRequestDiffStats>(() => new Map());

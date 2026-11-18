@@ -15,6 +15,7 @@ export function useSettingsWriter() {
     reportFailure: true,
   });
 
+  /** Resolves to the environments that did not save, interrupted ones included. */
   return async (
     targets: readonly ScopedMobileSettingsTarget[],
     writes: readonly {
@@ -42,7 +43,6 @@ export function useSettingsWriter() {
     if (failures.length > 0) {
       Dialog.alert("Could not save settings", failures.join("\n\n"));
     }
-    /** The environments that did not save, interrupted ones included. */
     return failed;
   };
 }

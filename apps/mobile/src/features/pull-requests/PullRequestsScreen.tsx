@@ -215,8 +215,8 @@ export function PullRequestsScreen(
     ),
   );
   const hiddenCount = visibilities.filter((visibility) => visibility === "hidden").length;
-  // With nothing hidden left the toggle is gone, so the next hide must not stay shown.
-  if (showHidden && hiddenCount === 0) setShowHidden(false);
+  // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
+  if (showHidden && feed.hidden.size === 0) setShowHidden(false);
   const feedEntries = entries.filter(
     (_, index) =>
       visibilities[index] === "shown" || (visibilities[index] === "hidden" && showHidden),

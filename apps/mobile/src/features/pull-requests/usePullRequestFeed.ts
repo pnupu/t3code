@@ -22,15 +22,15 @@ export function usePullRequestFeed() {
   const writeSettings = useSettingsWriter();
   const registry = use(RegistryContext);
   // Single keys this device sent, shown until the server's settings answer them.
-  const [sending, setSending] = useState<ReadonlyMap<string, SentHiddenPullRequest>>(
+  const [sending, setSending] = useState<ReadonlyMap<string, SentHiddenPullRequest<EnvironmentId>>>(
     () => new Map(),
   );
   const links = new Map(
     hiddenPullRequestLinks([...configs.values()].map((config) => config.settings)),
   );
+  const settingsOf = (id: EnvironmentId) => configs.get(id)?.settings;
   for (const [key, sent] of sending) {
-    if (!sentHiddenPullRequestApplies(sent, (id) => configs.get(id as EnvironmentId)?.settings))
-      continue;
+    if (!sentHiddenPullRequestApplies(sent, settingsOf)) continue;
     if (sent.url === null) links.delete(key);
     else links.set(key, sent.url);
   }
@@ -68,7 +68,14 @@ export function usePullRequestFeed() {
 
   // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const send = (key: string, url: string | null, environmentIds: ReadonlyArray<EnvironmentId>) => {
-    setSending((current) => new Map(current).set(key, { url }));
+    const sent: SentHiddenPullRequest<EnvironmentId> = { url };
+    setSending((current) => {
+      // Answered sends never apply again, so they leave here.
+      const next = new Map(
+        [...current].filter(([, entry]) => sentHiddenPullRequestApplies(entry, settingsOf)),
+      );
+      return next.set(key, sent);
+    });
     void writeSettings(
       [],
       environmentIds.map((environmentId) => ({
@@ -79,7 +86,8 @@ export function usePullRequestFeed() {
       // Read now: the push may have arrived before this reply.
       const latest = registry.get(environmentServerConfigsAtom);
       setSending((current) => {
-        if (current.get(key)?.url !== url || current.get(key)?.settledOver) return current;
+        // Only this send's own entry: a later send for the same key replaced it.
+        if (current.get(key) !== sent) return current;
         const next = new Map(current);
         if (failed.length > 0) next.delete(key);
         else
