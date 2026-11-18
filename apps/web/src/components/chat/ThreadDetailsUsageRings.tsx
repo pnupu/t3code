@@ -88,14 +88,14 @@ export function ThreadDetailsUsageRings() {
                     stroke="currentColor"
                     strokeWidth={STROKE}
                     strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    // Round caps add half a stroke at each end; trim the dash so the drawn arc matches the percent.
-                    strokeDashoffset={
+                    // Round caps add half a stroke at each end, so trim the dash to match the percent.
+                    // A non-zero dash keeps a small value visible as a cap-sized dot.
+                    strokeDasharray={`${
                       left >= 100
-                        ? 0
-                        : circumference - Math.max(0, (circumference * left) / 100 - STROKE)
-                    }
-                    className="opacity-35 transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
+                        ? circumference
+                        : Math.max(0.01, (circumference * left) / 100 - STROKE)
+                    } ${circumference}`}
+                    className="opacity-35 transition-[stroke-dasharray] duration-500 ease-out motion-reduce:transition-none"
                   />
                 ) : null}
               </g>
@@ -106,10 +106,10 @@ export function ThreadDetailsUsageRings() {
           {rings.map((ring) => {
             const { left } = ring;
             const pooled = ring.window.members.length > 1;
-            // A spent pool member's reset can restore nothing; name the next one that does.
-            const reset = ring.window.resets.find(
-              (entry) => entry.at > now && (!pooled || entry.restoresPercent > 0),
-            );
+            // A spent pool member's reset can restore nothing; name the next one that does, else the next one.
+            const upcoming = ring.window.resets.filter((entry) => entry.at > now);
+            const refill = pooled ? upcoming.find((entry) => entry.restoresPercent > 0) : undefined;
+            const reset = refill ?? upcoming[0];
             return (
               <Tooltip key={ring.key}>
                 <TooltipTrigger
@@ -147,7 +147,7 @@ export function ThreadDetailsUsageRings() {
                     </span>
                     {reset ? (
                       <span className="text-muted-foreground">
-                        {pooled ? `+${reset.restoresPercent}% in ` : "Resets in "}
+                        {refill ? `+${refill.restoresPercent}% in ` : "Resets in "}
                         {formatDuration(reset.at - now)} ·{" "}
                         {formatUpcomingTimestamp(
                           new Date(reset.at).toISOString(),
