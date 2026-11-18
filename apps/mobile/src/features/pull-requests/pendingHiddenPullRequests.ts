@@ -11,5 +11,10 @@ export function shownHiddenList(
   pending: PendingHiddenList | undefined,
 ): ReadonlyArray<string> {
   if (pending === undefined) return stored;
-  return pending.savedOver === undefined || pending.savedOver === stored ? pending.list : stored;
+  // By content: a settings re-emit for another reason rebuilds the array without changing it.
+  const sameList = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) =>
+    left.length === right.length && left.every((url, index) => url === right[index]);
+  return pending.savedOver === undefined || sameList(pending.savedOver, stored)
+    ? pending.list
+    : stored;
 }

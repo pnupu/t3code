@@ -147,7 +147,9 @@ export function PullRequestListEmptyState({
         </EmptyTitle>
         <EmptyDescription>
           {filtered
-            ? gt("Widen the state, involvement or project filter to see more.")
+            ? gt(
+                "Widen the state, involvement or project filter, or the projects' pull request feed rules, to see more.",
+              )
             : gt("Pull requests from every project in this workspace appear here.")}
         </EmptyDescription>
       </EmptyHeader>

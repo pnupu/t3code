@@ -9,6 +9,8 @@ describe("hidden pull request saves", () => {
   it("keeps a successful save until the subscription replaces the stored list", () => {
     expect(shownHiddenList(stored, { list: saved })).toBe(saved);
     expect(shownHiddenList(stored, { list: saved, savedOver: stored })).toBe(saved);
+    // An unrelated settings update rebuilds the stored array with the old contents.
+    expect(shownHiddenList([...stored], { list: saved, savedOver: stored })).toBe(saved);
     const echoed = [...saved];
     expect(shownHiddenList(echoed, { list: saved, savedOver: stored })).toBe(echoed);
   });

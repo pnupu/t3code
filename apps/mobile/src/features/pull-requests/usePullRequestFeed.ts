@@ -56,23 +56,26 @@ export function usePullRequestFeed() {
         environmentId,
         patch: { hiddenPullRequests },
       })),
-    ).then((failed) => {
-      // Read now: this render's settings may already be older than the reply.
-      const latest = registry.get(environmentServerConfigsAtom);
-      setPending((current) => {
-        const updated = new Map(current);
-        for (const [environmentId, list] of next) {
-          if (updated.get(environmentId)?.list !== list) continue;
-          if (failed.includes(environmentId)) updated.delete(environmentId);
-          else
-            updated.set(environmentId, {
-              list,
-              savedOver: latest.get(environmentId)?.settings.hiddenPullRequests ?? [],
-            });
-        }
-        return updated;
+    )
+      // A rejected write saved nothing either.
+      .catch(() => [...next.keys()])
+      .then((failed) => {
+        // Read now: this render's settings may already be older than the reply.
+        const latest = registry.get(environmentServerConfigsAtom);
+        setPending((current) => {
+          const updated = new Map(current);
+          for (const [environmentId, list] of next) {
+            if (updated.get(environmentId)?.list !== list) continue;
+            if (failed.includes(environmentId)) updated.delete(environmentId);
+            else
+              updated.set(environmentId, {
+                list,
+                savedOver: latest.get(environmentId)?.settings.hiddenPullRequests ?? [],
+              });
+          }
+          return updated;
+        });
       });
-    });
   };
 
   const hide = (entry: { readonly environmentId: EnvironmentId; readonly url: string }) => {
