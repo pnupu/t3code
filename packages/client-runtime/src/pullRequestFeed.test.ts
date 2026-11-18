@@ -4,6 +4,9 @@ import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t
 import {
   filterPullRequestFeed,
   hiddenPullRequestList,
+  hiddenPullRequestRepositories,
+  pullRequestFeedVisibility,
+  pullRequestRepositoryKey,
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
@@ -84,6 +87,49 @@ describe("pull request feed rules", () => {
       hiddenCount: 1,
       ruledOutCount: 0,
     });
+  });
+
+  it.each<[string, PullRequestFeedRule, PullRequestFeedGroup, PullRequestFeedGroup, boolean]>([
+    ["admits a row its own group admits", "authored", "others", "authored", true],
+    ["admits a row its list group admits", "reviewing", "reviewRequested", "others", true],
+    ["drops a row neither group admits", "authored", "others", "reviewRequested", false],
+  ])("%s", (_, rule, listGroup, ownGroup, shown) => {
+    expect(
+      pullRequestFeedVisibility({ url: "https://h/a/1" }, listGroup, {
+        scopedToProject: false,
+        involvement: "all",
+        ruleFor: () => rule,
+        hidden: new Set(),
+        groupOf: () => ownGroup,
+      }),
+    ).toBe(shown ? "shown" : "rule");
+  });
+
+  it("rules out every environment's copy of a repository one environment hides", () => {
+    const rows = [
+      { environmentId: "env-1", host: "github.com", repository: "X/A", url: "https://h/a/1" },
+      { environmentId: "env-2", host: "GitHub.com", repository: "x/a", url: "https://h/a/2" },
+      { environmentId: "env-2", host: "github.com", repository: "x/b", url: "https://h/b/3" },
+    ];
+    const hiddenRepositories = hiddenPullRequestRepositories(rows, (row) =>
+      row.environmentId === "env-1" ? "hidden" : "all",
+    );
+    const options = {
+      scopedToProject: false,
+      involvement: "all" as const,
+      ruleFor: () => "all" as const,
+      hidden: new Set<string>(),
+      repositoryHidden: (row: (typeof rows)[number]) =>
+        hiddenRepositories.has(pullRequestRepositoryKey(row)),
+    };
+    expect(rows.map((row) => pullRequestFeedVisibility(row, "others", options))).toEqual([
+      "rule",
+      "rule",
+      "shown",
+    ]);
+    expect(
+      pullRequestFeedVisibility(rows[1]!, "others", { ...options, scopedToProject: true }),
+    ).toBe("shown");
   });
 
   it("lists each hidden link once across environments, in its first spelling", () => {
