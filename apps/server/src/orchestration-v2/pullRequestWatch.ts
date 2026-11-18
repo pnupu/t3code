@@ -82,9 +82,6 @@ export function evaluatePullRequestWatch(
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
     if (!checksBaseline && newlyFailed.length > 0) {
       changes.push({ kind: "checks-failed", failed: newlyFailed });
-    } else if (!checksBaseline && !unread && pendingBefore && !checksPending && failed.length > 0) {
-      // A failure keeps the gate from passing, so the other checks finishing is news of its own.
-      changes.push({ kind: "checks-finished", failed });
     }
     if (!approvalAnnounced && awaiting.length > 0) {
       if (!checksBaseline) changes.push({ kind: "checks-awaiting-approval", checks: awaiting });
@@ -122,6 +119,17 @@ export function evaluatePullRequestWatch(
           (workflowRunOf(key) === key ? !finished.has(key) : nameUnfinished(key)),
       ),
     ];
+    // A failure keeps the gate from passing, so the other checks finishing is news of its own.
+    if (
+      !checksBaseline &&
+      newlyFailed.length === 0 &&
+      failed.length > 0 &&
+      pendingBefore &&
+      !checksPending &&
+      awaitingApproval.length === 0
+    ) {
+      changes.push({ kind: "checks-finished", failed });
+    }
   }
   const required = checks.filter((check) => check.required === true);
   const gate = required.length > 0 ? required : checks;
