@@ -549,7 +549,18 @@ describe("evaluatePullRequestWatch", () => {
     const gatedRunning = detail({ checks: [...gated.checks, check("test", "pending")] });
     const held = evaluatePullRequestWatch(watch(), gatedRunning, noRemarks).next;
     const gatedDone = detail({ checks: [...gated.checks, check("test", "success")] });
-    assert.deepEqual(evaluatePullRequestWatch(held, gatedDone, noRemarks).changes, []);
+    const holding = evaluatePullRequestWatch(held, gatedDone, noRemarks);
+    assert.deepEqual(holding.changes, []);
+    const approved = detail({
+      checks: [
+        { ...approval, status: "success" },
+        check("lint", "failure"),
+        check("test", "success"),
+      ],
+    });
+    assert.deepEqual(evaluatePullRequestWatch(holding.next, approved, noRemarks).changes, [
+      { kind: "checks-finished", failed: [check("lint", "failure")] },
+    ]);
   });
 
   it("reports passed once the required checks pass, whatever the others do", () => {
