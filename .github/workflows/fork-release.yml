@@ -21,7 +21,7 @@ env:
 jobs:
   preflight:
     name: Resolve version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
@@ -74,7 +74,7 @@ jobs:
     name: Typecheck and fork tests
     needs: [preflight]
     if: needs.preflight.outputs.skip == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
@@ -121,7 +121,7 @@ jobs:
     name: Build CLI archive (linux-x64)
     needs: [preflight]
     if: needs.preflight.outputs.skip == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
@@ -199,7 +199,8 @@ jobs:
       matrix:
         include:
           - label: Linux x64
-            runner: ubuntu-latest
+            # Ubuntu 24.04 keeps glibc at GLIBC_BUILD_CEILING (scripts/linux-glibc.ts); do not use ubuntu-latest.
+            runner: ubuntu-24.04
             platform: linux
             target: AppImage
             arch: x64
@@ -280,7 +281,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [preflight, check, build_cli, build_desktop]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
@@ -327,7 +328,7 @@ jobs:
     name: Report a failed release
     needs: [preflight, check, build_cli, build_desktop, release]
     if: failure()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       issues: write
     steps:
