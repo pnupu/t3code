@@ -199,6 +199,7 @@ jobs:
       matrix:
         include:
           - label: Linux x64
+            # Ubuntu 24.04 keeps glibc at GLIBC_BUILD_CEILING (scripts/linux-glibc.ts); do not use ubuntu-latest.
             runner: ubuntu-24.04
             platform: linux
             target: AppImage
