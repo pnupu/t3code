@@ -35,12 +35,13 @@ export function ThreadDetailsUsageRings() {
       const color = barColor(pool.driver);
       return displayLimitWindows(pool)
         .filter((window) => window.kind === "weekly")
-        .map((window) => ({
+        .map((window, index) => ({
           key: `${pool.driver}:${window.id}`,
           // "Weekly · Fable" and "Go · Weekly" keep their qualifier; plain "Weekly" names the provider.
           name: window.label.replace(/^Weekly\s*·\s*|\s*·\s*Weekly$|^Weekly$/i, "") || provider,
           title: `${provider} ${window.label}`,
-          color,
+          // A provider's extra weekly windows turn its hue so each ring reads apart.
+          color: index === 0 ? color : `oklch(from ${color} l c calc(h + ${45 * index}))`,
           left: Math.max(0, Math.min(100, window.remainingPercent)),
           window,
         }));
