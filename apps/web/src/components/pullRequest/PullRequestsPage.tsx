@@ -78,6 +78,7 @@ import {
 } from "./pullRequestListOptions";
 import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
+import { usePullRequestFeed } from "./usePullRequestFeed";
 import { pullRequestPanelReference } from "./usePullRequestDetail";
 import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
 import {
@@ -767,10 +768,13 @@ export function PullRequestsPage() {
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const feed = usePullRequestFeed();
+  const [showHidden, setShowHidden] = useState(false);
   const {
     entries,
     listedPullRequestTabStatuses,
     groups,
+    hiddenCount,
     entriesByStatsKey,
     heldPullRequestsBySurface,
   } = pullRequestGroups({
@@ -798,6 +802,12 @@ export function PullRequestsPage() {
     authored: partitionsWanted && authoredQuery.data !== null ? shownAuthored : undefined,
     reviewing: partitionsWanted && reviewingQuery.data !== null ? shownReviewing : undefined,
     partitionsWanted,
+    feed: {
+      scopedToProject: scopedProjectId !== undefined,
+      ruleFor: feed.ruleFor,
+      hidden: feed.hidden,
+      showHidden,
+    },
   });
 
   const visibleStatsKeys = useRef({ key: filterKey, values: new Set<string>() });
@@ -1307,8 +1317,16 @@ export function PullRequestsPage() {
           closingKeys={closingKeys}
           sweepingKeys={closeSweepKeys}
           onCloseSweepStart={startCloseSweep}
+          onRowMenu={feed.showRowMenu}
         />
       )}
+      {hiddenCount > 0 ? (
+        <div className="flex justify-center">
+          <Button size="xs" variant="ghost-muted" onClick={() => setShowHidden(!showHidden)}>
+            {showHidden ? `Hide ${hiddenCount} hidden` : `Show ${hiddenCount} hidden`}
+          </Button>
+        </div>
+      ) : null}
 
       {listError && shownCount > 0 ? (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning-surface px-3 py-2 text-xs">

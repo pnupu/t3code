@@ -11,7 +11,11 @@ import {
   type EnvironmentPullRequestEntry,
   type PullRequestGroup,
 } from "./pullRequestList.logic";
-import { PullRequestRow, type PullRequestRowTarget } from "./PullRequestRow";
+import {
+  PullRequestRow,
+  type PullRequestRowMenu,
+  type PullRequestRowTarget,
+} from "./PullRequestRow";
 import {
   PullRequestSpeedModeProvider,
   type PullRequestSpeedActionResult,
@@ -70,6 +74,7 @@ export function PullRequestListGroups({
   closingKeys,
   sweepingKeys,
   onCloseSweepStart,
+  onRowMenu,
 }: {
   groups: ReadonlyArray<PullRequestGroup<EnvironmentPullRequestEntry>>;
   /** Only when rows come from more than one server, so each says which. */
@@ -90,6 +95,7 @@ export function PullRequestListGroups({
   closingKeys: ReadonlySet<string>;
   sweepingKeys: ReadonlySet<string>;
   onCloseSweepStart: (entry: EnvironmentPullRequestEntry, event: PointerEvent) => void;
+  onRowMenu?: PullRequestRowMenu;
 }) {
   // Every row mounts tooltips and actions; painting a first screenful before the rest keeps
   // opening the page from blocking on the whole list.
@@ -135,6 +141,7 @@ export function PullRequestListGroups({
                   closing={closingKeys.has(entryKey)}
                   sweeping={sweepingKeys.has(entryKey)}
                   onCloseSweepStart={onCloseSweepStart}
+                  {...(onRowMenu ? { onRowMenu } : {})}
                 />
               );
             })}

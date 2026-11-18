@@ -70,6 +70,13 @@ export type PullRequestRowTarget = Pick<
   "environmentId" | "projectId" | "host" | "repository" | "number"
 >;
 
+/** Opens the row's menu; without one, the number keeps the link-only menu. */
+export type PullRequestRowMenu = (
+  entry: EnvironmentPullRequestEntry,
+  openLabel: string,
+  position: { readonly x: number; readonly y: number },
+) => void;
+
 function PullRequestRowImpl({
   entry,
   selected,
@@ -86,6 +93,7 @@ function PullRequestRowImpl({
   closing = false,
   sweeping = false,
   onCloseSweepStart,
+  onRowMenu,
 }: {
   entry: EnvironmentPullRequestEntry;
   selected: boolean;
@@ -104,13 +112,23 @@ function PullRequestRowImpl({
   closing?: boolean;
   sweeping?: boolean;
   onCloseSweepStart?: (entry: EnvironmentPullRequestEntry, event: PointerEvent) => void;
+  onRowMenu?: PullRequestRowMenu;
 }) {
   const { Icon, providerName, terminology } = getSourceControlPresentationForKind(entry.provider);
+  const openLabel = openOnHostLabel(sourceControlClients.get(entry.provider));
   return (
     <div
       ref={statsRef}
       data-pull-request-stats-key={statsKey}
       data-pull-request-key={statsKey}
+      onContextMenu={
+        onRowMenu
+          ? (event) => {
+              event.preventDefault();
+              onRowMenu(entry, openLabel, { x: event.clientX, y: event.clientY });
+            }
+          : undefined
+      }
       className={cn(
         "flex items-center rounded-md [content-visibility:auto] [contain-intrinsic-block-size:56.5px]",
         selected ? "bg-accent" : "hover:bg-accent/60",
@@ -145,15 +163,19 @@ function PullRequestRowImpl({
           number={
             <span
               className={PULL_REQUEST_ROW_NUMBER_CLASS}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void showPullRequestLinkContextMenu({
-                  url: entry.url,
-                  openLabel: openOnHostLabel(sourceControlClients.get(entry.provider)),
-                  position: { x: event.clientX, y: event.clientY },
-                });
-              }}
+              onContextMenu={
+                onRowMenu
+                  ? undefined
+                  : (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void showPullRequestLinkContextMenu({
+                        url: entry.url,
+                        openLabel,
+                        position: { x: event.clientX, y: event.clientY },
+                      });
+                    }
+              }
             >
               #{entry.number}
             </span>

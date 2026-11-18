@@ -1,3 +1,7 @@
+import {
+  filterPullRequestFeed,
+  type PullRequestFeedOptions,
+} from "@t3tools/client-runtime/pull-request-feed";
 import type {
   PullRequestInvolvement,
   PullRequestListFilters,
@@ -39,6 +43,7 @@ export function pullRequestGroups({
   authored,
   reviewing,
   partitionsWanted,
+  feed,
 }: {
   known: ReadonlyArray<EnvironmentPullRequestEntry>;
   /** The text-free rows already loaded, or undefined when the typed filters cannot vet them. */
@@ -55,6 +60,10 @@ export function pullRequestGroups({
   authored: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
   reviewing: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
   partitionsWanted: boolean;
+  /** Project feed rules and hidden pull requests; `hiddenCount` counts hidden rows in this view. */
+  feed?: Omit<PullRequestFeedOptions<EnvironmentPullRequestEntry>, "involvement"> & {
+    readonly showHidden: boolean;
+  };
 }) {
   const searchingHosts = new Set(
     providers.flatMap((provider) => (provider.searchesOnHost ? [provider.host] : [])),
@@ -69,7 +78,7 @@ export function pullRequestGroups({
       : involvementEntries;
   };
 
-  const entries = (() => {
+  const searched = (() => {
     const narrowedEntries = narrowRows(known);
     if (text.length === 0) {
       return narrowedEntries.toSorted(comparePullRequestsByRecency);
@@ -89,20 +98,10 @@ export function pullRequestGroups({
     return missed.length === 0 ? matched : [...matched, ...rankPullRequestMatches(missed, text)];
   })();
 
-  const listedPullRequestTabStatuses: Record<string, PullRequestTabStatusSeed> = Object.fromEntries(
-    entries.map((entry) => [
-      pullRequestSurfaceId(entry),
-      {
-        state: entry.state,
-        isDraft: entry.isDraft,
-      },
-    ]),
-  );
-
-  const groups = (() => {
-    if (involvement !== "all") return [{ key: "others" as const, label: "", entries }];
+  const grouped = (() => {
+    if (involvement !== "all") return [{ key: "others" as const, label: "", entries: searched }];
     if (baselineEmpty) {
-      return groupPullRequestsByInvolvement(entries, viewers);
+      return groupPullRequestsByInvolvement(searched, viewers);
     }
     const narrow = (rows: ReadonlyArray<EnvironmentPullRequestEntry> | undefined) =>
       rows === undefined || !hasLocalFilters
@@ -113,10 +112,34 @@ export function pullRequestGroups({
     const narrowedAuthored = narrow(partitionsWanted ? (authored ?? held?.authored) : undefined);
     const narrowedReviewing = narrow(partitionsWanted ? (reviewing ?? held?.reviewing) : undefined);
     if (narrowedAuthored === undefined || narrowedReviewing === undefined) {
-      return groupPullRequestsByInvolvement(entries, viewers);
+      return groupPullRequestsByInvolvement(searched, viewers);
     }
-    return partitionPullRequestsWithPriority(entries, narrowedAuthored, narrowedReviewing);
+    return partitionPullRequestsWithPriority(searched, narrowedAuthored, narrowedReviewing);
   })();
+
+  // lean: projects ruled "authored" or "reviewing" are still read by the main list, and their
+  // other rows drop here, which can leave a short page. Revisit if users report sparse pages.
+  const { groups, hiddenCount } =
+    feed === undefined
+      ? { groups: grouped, hiddenCount: 0 }
+      : filterPullRequestFeed(grouped, { ...feed, involvement });
+  const entries =
+    groups === grouped
+      ? searched
+      : (() => {
+          const kept = new Set(groups.flatMap((group) => group.entries.map((entry) => entry.url)));
+          return searched.filter((entry) => kept.has(entry.url));
+        })();
+
+  const listedPullRequestTabStatuses: Record<string, PullRequestTabStatusSeed> = Object.fromEntries(
+    entries.map((entry) => [
+      pullRequestSurfaceId(entry),
+      {
+        state: entry.state,
+        isDraft: entry.isDraft,
+      },
+    ]),
+  );
 
   const entriesByStatsKey: ReadonlyMap<string, EnvironmentPullRequestEntry> = new Map(
     groups.flatMap((group) =>
@@ -132,6 +155,7 @@ export function pullRequestGroups({
     entries,
     listedPullRequestTabStatuses,
     groups,
+    hiddenCount,
     entriesByStatsKey,
     heldPullRequestsBySurface,
   };

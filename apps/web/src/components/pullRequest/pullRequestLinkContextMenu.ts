@@ -48,6 +48,14 @@ export async function showPullRequestLinkContextMenu({
   } catch {
     return;
   }
+  if (action !== null) await runPullRequestLinkAction(action, url);
+}
+
+export async function runPullRequestLinkAction(
+  action: PullRequestLinkContextMenuAction,
+  url: string,
+): Promise<void> {
+  const api = readLocalApi();
   try {
     if (action === "copy-link")
       await writeTextToClipboard(url, {
@@ -55,7 +63,7 @@ export async function showPullRequestLinkContextMenu({
         unavailableMessage: msg("Clipboard API is unavailable while copying link."),
         failureMessage: msg("Failed to copy link to the clipboard."),
       });
-    else if (action === "open-external") await api.shell.openExternal(url);
+    else await api?.shell.openExternal(url);
   } catch {
     toastManager.add({
       type: "error",
