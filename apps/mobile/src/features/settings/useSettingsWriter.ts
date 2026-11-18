@@ -22,12 +22,14 @@ export function useSettingsWriter() {
       readonly patch: ServerSettingsPatch;
     }[],
   ) => {
+    const failed: EnvironmentId[] = [];
     const outcomes = await Promise.all(
       writes.map(async (entry) => {
         const result = await updateSettings({
           environmentId: entry.environmentId,
           input: { patch: entry.patch },
         });
+        if (result._tag === "Failure") failed.push(entry.environmentId);
         if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
         const label =
           targets.find((target) => target.environment.environmentId === entry.environmentId)
@@ -40,5 +42,7 @@ export function useSettingsWriter() {
     if (failures.length > 0) {
       Dialog.alert("Could not save settings", failures.join("\n\n"));
     }
+    /** The environments that did not save, interrupted ones included. */
+    return failed;
   };
 }

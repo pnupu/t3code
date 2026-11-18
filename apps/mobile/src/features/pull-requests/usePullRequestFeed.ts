@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   hiddenPullRequestKey,
   hiddenPullRequestLinks,
@@ -7,26 +7,32 @@ import {
   pullRequestProjectHidesRepository,
 } from "@t3tools/client-runtime/pull-request-feed";
 import { AuthSettingsWriteScope, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
-import { useState } from "react";
+import { use, useState } from "react";
 
 import { readEnvironmentScope } from "../../state/session";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useSettingsWriter } from "../settings/useSettingsWriter";
+import { sentHiddenPullRequestApplies, type SentHiddenPullRequest } from "./sentHiddenPullRequests";
 
 /** Per-project feed rules and hidden pull requests, read from every environment's settings. */
 export function usePullRequestFeed() {
   const configs = useAtomValue(environmentServerConfigsAtom);
   const environments = useWorkspaceEnvironments();
   const writeSettings = useSettingsWriter();
-  // Single keys still on their way to the server: a URL hides, null shows again.
-  const [sending, setSending] = useState<ReadonlyMap<string, string | null>>(() => new Map());
+  const registry = use(RegistryContext);
+  // Single keys this device sent, shown until the server's settings answer them.
+  const [sending, setSending] = useState<ReadonlyMap<string, SentHiddenPullRequest>>(
+    () => new Map(),
+  );
   const links = new Map(
     hiddenPullRequestLinks([...configs.values()].map((config) => config.settings)),
   );
-  for (const [key, url] of sending) {
-    if (url === null) links.delete(key);
-    else links.set(key, url);
+  for (const [key, sent] of sending) {
+    if (!sentHiddenPullRequestApplies(sent, (id) => configs.get(id as EnvironmentId)?.settings))
+      continue;
+    if (sent.url === null) links.delete(key);
+    else links.set(key, sent.url);
   }
   const hidden: ReadonlySet<string> = new Set(links.keys());
   const hiddenUrls = [...links.values()];
@@ -62,21 +68,28 @@ export function usePullRequestFeed() {
 
   // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const send = (key: string, url: string | null, environmentIds: ReadonlyArray<EnvironmentId>) => {
-    setSending((current) => new Map(current).set(key, url));
+    setSending((current) => new Map(current).set(key, { url }));
     void writeSettings(
       [],
       environmentIds.map((environmentId) => ({
         environmentId,
         patch: { hiddenPullRequests: { [key]: url } },
       })),
-    ).finally(() =>
+    ).then((failed) => {
+      // Read now: the push may have arrived before this reply.
+      const latest = registry.get(environmentServerConfigsAtom);
       setSending((current) => {
-        if (current.get(key) !== url) return current;
+        if (current.get(key)?.url !== url || current.get(key)?.settledOver) return current;
         const next = new Map(current);
-        next.delete(key);
+        if (failed.length > 0) next.delete(key);
+        else
+          next.set(key, {
+            url,
+            settledOver: new Map(environmentIds.map((id) => [id, latest.get(id)?.settings])),
+          });
         return next;
-      }),
-    );
+      });
+    });
   };
 
   const hide = (entry: { readonly environmentId: EnvironmentId; readonly url: string }) => {
@@ -85,21 +98,45 @@ export function usePullRequestFeed() {
     }
   };
 
+  // Every environment that holds the link hides it, so all of them must be able to clear it.
   const holders = (url: string) =>
     [...configs].flatMap(([environmentId, config]) =>
-      canHide(environmentId) &&
       isPullRequestHidden(new Set(hiddenPullRequestLinks([config.settings]).keys()), url)
         ? [environmentId]
         : [],
     );
+  /** The environment that keeps the link hidden because this device cannot clear it there. */
+  const unhideBlockedBy = (url: string) => {
+    const blocking = holders(url).find(
+      (environmentId) =>
+        !canHide(environmentId) ||
+        !environments.some(
+          (environment) =>
+            environment.environmentId === environmentId &&
+            environment.connectionState === "connected",
+        ),
+    );
+    if (blocking === undefined) return null;
+    return (
+      environments.find((environment) => environment.environmentId === blocking)
+        ?.environmentLabel ?? blocking
+    );
+  };
+  const canUnhide = (url: string) => holders(url).length > 0 && unhideBlockedBy(url) === null;
 
-  // Every environment that holds the link hides it, so unhiding clears them all.
   const unhide = (url: string) => {
-    const environmentIds = holders(url);
-    if (environmentIds.length > 0) send(hiddenPullRequestKey(url), null, environmentIds);
+    if (canUnhide(url)) send(hiddenPullRequestKey(url), null, holders(url));
   };
 
-  const canUnhide = (url: string) => holders(url).length > 0;
-
-  return { hidden, hiddenUrls, ruleFor, hidesRepository, canHide, canUnhide, hide, unhide };
+  return {
+    hidden,
+    hiddenUrls,
+    ruleFor,
+    hidesRepository,
+    canHide,
+    canUnhide,
+    unhideBlockedBy,
+    hide,
+    unhide,
+  };
 }

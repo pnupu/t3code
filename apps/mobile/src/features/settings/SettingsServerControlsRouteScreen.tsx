@@ -495,7 +495,11 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                           key={url}
                           icon="eye.slash"
                           label={link ? `${link.repository} #${link.number}` : url}
-                          value="Unhide"
+                          value={
+                            feed.unhideBlockedBy(url) === null
+                              ? "Unhide"
+                              : `Hidden by ${feed.unhideBlockedBy(url)}`
+                          }
                           valuePosition="trailing"
                           disabled={!feed.canUnhide(url)}
                           onPress={() => feed.unhide(url)}
