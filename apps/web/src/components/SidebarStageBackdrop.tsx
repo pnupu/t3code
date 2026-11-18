@@ -5,9 +5,10 @@ import { useId } from "react";
 import { APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
 import { primaryServerConfigAtom } from "../state/server";
+import { ForkBranchArt } from "./ForkBranchArt";
 
-export type SidebarStageBackdropVariant = "nightly" | "dev";
-export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
+export type SidebarStageBackdropVariant = "nightly" | "dev" | "fork";
+export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly" | "Fork";
 
 const STAGE_BACKDROP_VIEW_BOX = "0 0 8192 96";
 
@@ -21,6 +22,7 @@ export function resolveSidebarStageBackdropVariant(
   const normalized = stageLabel.trim().toLowerCase();
   if (normalized === "nightly") return "nightly";
   if (normalized === "dev") return "dev";
+  if (normalized === "fork") return "fork";
   return null;
 }
 
@@ -30,6 +32,7 @@ export function resolveEnvironmentIdentificationPillLabel(
   const normalized = stageLabel.trim().toLowerCase();
   if (normalized === "dev") return "Dev";
   if (normalized === "nightly") return "Nightly";
+  if (normalized === "fork") return "Fork";
   return null;
 }
 
@@ -61,10 +64,12 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
 }
 
 function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
+  if (variant === "fork") return <ForkBranchArt />;
   return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
 }
 
 export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
+  if (variant === "fork") return <ForkBranchArt compact />;
   return variant === "nightly" ? <NightlySkyArt compact /> : <DevBlueprintArt compact />;
 }
 
