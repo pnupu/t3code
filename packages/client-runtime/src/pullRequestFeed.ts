@@ -185,16 +185,14 @@ export function pullRequestFeedVisibility<Entry extends { readonly url: string }
   options: PullRequestFeedOptions<Entry>,
 ): "shown" | "rule" | "hidden" {
   if (!options.scopedToProject) {
-    const ownGroup = options.groupOf?.(entry);
+    let ownGroup: PullRequestFeedGroup | undefined;
     const admitted =
       options.repositoryHidden?.(entry) !== true &&
-      options
-        .rulesFor(entry)
-        .some(
-          (rule) =>
-            pullRequestFeedShows(rule, group, options.involvement) ||
-            (ownGroup !== undefined && pullRequestFeedShows(rule, ownGroup, options.involvement)),
-        );
+      options.rulesFor(entry).some((rule) => {
+        if (pullRequestFeedShows(rule, group, options.involvement)) return true;
+        ownGroup ??= options.groupOf?.(entry);
+        return ownGroup !== undefined && pullRequestFeedShows(rule, ownGroup, options.involvement);
+      });
     if (!admitted) return "rule";
   }
   return isPullRequestHidden(options.hidden, entry.url) ? "hidden" : "shown";
