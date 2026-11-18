@@ -67,15 +67,22 @@ export function pullRequestFeedShows(
   }
 }
 
-/** Every environment's hidden list counts, so a pull request stays hidden when another serves it. */
-export function hiddenPullRequestUrls(
-  settings: Iterable<Pick<ServerSettings, "hiddenPullRequests"> | null | undefined>,
-): ReadonlySet<string> {
-  const urls = new Set<string>();
+type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefined;
+
+/** Every environment's hidden links, once each in their first spelling, oldest first. */
+export function hiddenPullRequestList(settings: Iterable<HiddenSettings>): ReadonlyArray<string> {
+  const urls = new Map<string, string>();
   for (const entry of settings) {
-    for (const url of entry?.hiddenPullRequests ?? []) urls.add(url.toLowerCase());
+    for (const url of entry?.hiddenPullRequests ?? []) {
+      if (!urls.has(url.toLowerCase())) urls.set(url.toLowerCase(), url);
+    }
   }
-  return urls;
+  return [...urls.values()];
+}
+
+/** Every environment's hidden list counts, so a pull request stays hidden when another serves it. */
+export function hiddenPullRequestUrls(settings: Iterable<HiddenSettings>): ReadonlySet<string> {
+  return new Set(hiddenPullRequestList(settings).map((url) => url.toLowerCase()));
 }
 
 export function isPullRequestHidden(hidden: ReadonlySet<string>, url: string): boolean {
@@ -131,18 +138,24 @@ export function filterPullRequestFeed<
 >(
   groups: ReadonlyArray<Group>,
   options: PullRequestFeedOptions<Group["entries"][number]> & { readonly showHidden?: boolean },
-): { readonly groups: ReadonlyArray<Group>; readonly hiddenCount: number } {
+): {
+  readonly groups: ReadonlyArray<Group>;
+  readonly hiddenCount: number;
+  readonly ruledOutCount: number;
+} {
   let hiddenCount = 0;
+  let ruledOutCount = 0;
   let changed = false;
   const next = groups.flatMap((group) => {
     const entries = group.entries.filter((entry) => {
       const visibility = pullRequestFeedVisibility(entry, group.key, options);
       if (visibility === "hidden") hiddenCount += 1;
+      if (visibility === "rule") ruledOutCount += 1;
       return visibility === "shown" || (visibility === "hidden" && options.showHidden === true);
     });
     if (entries.length === group.entries.length) return [group];
     changed = true;
     return entries.length === 0 ? [] : [{ ...group, entries }];
   });
-  return { groups: changed ? next : groups, hiddenCount };
+  return { groups: changed ? next : groups, hiddenCount, ruledOutCount };
 }

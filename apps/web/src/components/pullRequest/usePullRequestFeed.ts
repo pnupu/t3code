@@ -1,4 +1,5 @@
 import {
+  hiddenPullRequestList,
   hiddenPullRequestUrls,
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
@@ -6,17 +7,19 @@ import {
   withHiddenPullRequest,
   withoutHiddenPullRequest,
 } from "@t3tools/client-runtime/pull-request-feed";
-import type {
-  ContextMenuItem,
-  EnvironmentId,
-  ProjectId,
-  PullRequestFeedRule,
+import {
+  AuthSettingsWriteScope,
+  type ContextMenuItem,
+  type EnvironmentId,
+  type ProjectId,
+  type PullRequestFeedRule,
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { readLocalApi } from "~/localApi";
 import { useEnvironments } from "~/state/environments";
+import { readEnvironmentScope } from "~/state/session";
 
 import {
   applyPendingScopedWrites,
@@ -45,21 +48,24 @@ export function usePullRequestFeed() {
   const settingsOf = (environmentId: EnvironmentId) =>
     environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
       ?.settings;
-  const hidden = hiddenPullRequestUrls(
-    environments.map((environment) => environment.serverConfig?.settings),
-  );
+  const allSettings = environments.map((environment) => environment.serverConfig?.settings);
+  const hidden = hiddenPullRequestUrls(allSettings);
+  const hiddenUrls = hiddenPullRequestList(allSettings);
 
   const ruleFor = (entry: { environmentId: EnvironmentId; projectId: ProjectId }) =>
     pullRequestFeedRule(settingsOf(entry.environmentId), entry.projectId);
 
-  // Original spelling, newest last, once per link.
-  const hiddenUrls = [
-    ...new Map(
-      environments
-        .flatMap((environment) => environment.serverConfig?.settings.hiddenPullRequests ?? [])
-        .map((url) => [url.toLowerCase(), url] as const),
-    ).values(),
-  ];
+  /** Older servers drop these settings, and a standard pairing cannot write settings. */
+  const canWrite = (environmentId: EnvironmentId) =>
+    environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
+      ?.environment.capabilities.pullRequestFeed === true &&
+    readEnvironmentScope(environmentId, AuthSettingsWriteScope);
+  const holders = (url: string) =>
+    environments.filter(
+      (environment) =>
+        canWrite(environment.environmentId) &&
+        isPullRequestHidden(hiddenPullRequestUrls([environment.serverConfig?.settings]), url),
+    );
 
   const hide = (entry: Pick<EnvironmentPullRequestEntry, "environmentId" | "url">) =>
     runPlan(
@@ -72,7 +78,7 @@ export function usePullRequestFeed() {
 
   // Every environment that holds the link hides it, so unhiding clears them all.
   const unhide = (url: string) =>
-    runPlan(environments, (current) =>
+    runPlan(holders(url), (current) =>
       planEnvironmentSettingsPatch(current, (settings) => {
         const next = withoutHiddenPullRequest(settings.hiddenPullRequests, url);
         return next.length === settings.hiddenPullRequests.length
@@ -102,19 +108,22 @@ export function usePullRequestFeed() {
     if (!api) return;
     const isHidden = isPullRequestHidden(hidden, entry.url);
     const rule = ruleFor(entry);
-    const rulesSupported =
-      environments.find((environment) => environment.environmentId === entry.environmentId)
-        ?.serverConfig?.environment.capabilities.projectSettingsOverrides === true;
+    const writable = canWrite(entry.environmentId);
     const items: ContextMenuItem<FeedMenuAction>[] = [
       { id: "copy-link", label: "Copy link", icon: "copy" },
       { id: "open-external", label: openLabel },
       isHidden
-        ? { id: "unhide", label: "Show in feed", separatorBefore: true }
-        : { id: "hide", label: "Hide from feed", separatorBefore: true },
+        ? {
+            id: "unhide",
+            label: "Show in feed",
+            separatorBefore: true,
+            disabled: holders(entry.url).length === 0,
+          }
+        : { id: "hide", label: "Hide from feed", separatorBefore: true, disabled: !writable },
       {
         id: "rule:all",
         label: `Feed for ${entry.projectTitle}`,
-        disabled: !rulesSupported,
+        disabled: !writable,
         children: PULL_REQUEST_FEED_RULES.map((option) => ({
           id: `rule:${option.value}` as const,
           label: option.label,
@@ -144,5 +153,7 @@ export function usePullRequestFeed() {
     void openRowMenu(entry, openLabel, position);
   });
 
-  return { hidden, hiddenUrls, ruleFor, unhide, showRowMenu };
+  const canUnhide = (url: string) => holders(url).length > 0;
+
+  return { hidden, hiddenUrls, ruleFor, unhide, canUnhide, showRowMenu };
 }

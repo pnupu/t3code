@@ -3,6 +3,7 @@ import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t
 
 import {
   filterPullRequestFeed,
+  hiddenPullRequestList,
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
@@ -69,17 +70,30 @@ describe("pull request feed rules", () => {
     expect(filterPullRequestFeed(groups, { ...options, scopedToProject: false })).toEqual({
       groups: [groups[0]],
       hiddenCount: 1,
+      ruledOutCount: 1,
     });
     expect(
       filterPullRequestFeed(groups, { ...options, scopedToProject: false, showHidden: true }),
     ).toEqual({
       groups: [groups[0], { key: "others", entries: [row(projectB, "https://H/B/3")] }],
       hiddenCount: 1,
+      ruledOutCount: 1,
     });
     expect(filterPullRequestFeed(groups, { ...options, scopedToProject: true })).toEqual({
       groups: [groups[0], { key: "others", entries: [row(projectA, "https://h/a/2")] }],
       hiddenCount: 1,
+      ruledOutCount: 0,
     });
+  });
+
+  it("lists each hidden link once across environments, in its first spelling", () => {
+    expect(
+      hiddenPullRequestList([
+        { hiddenPullRequests: ["https://H/A/1"] },
+        null,
+        { hiddenPullRequests: ["https://h/a/1", "https://h/b/2"] },
+      ]),
+    ).toEqual(["https://H/A/1", "https://h/b/2"]);
   });
 
   it("hides and unhides by URL regardless of case", () => {
