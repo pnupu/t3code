@@ -2814,13 +2814,13 @@ const make = Effect.gen(function* () {
           : readTask(scope, taskId, false, true);
       }
       const { scope, parent } = yield* loadThreadCaller(callerScope, "delegate_task");
-      if (
-        input.target?.projectId !== undefined &&
-        input.target.projectId !== parent.thread.projectId
-      ) {
+      const projectId = input.target?.projectId ?? parent.thread.projectId;
+      const otherProject = projectId !== parent.thread.projectId;
+      // A shared child would inherit this thread's checkout, which is not in that project.
+      if (otherProject && input.isolation !== "worktree") {
         return yield* failure(
           "invalid_request",
-          "A local task runs in this thread's project. Omit target.projectId, or pass target.environmentId to run it in that environment's project.",
+          'A local task in another project needs isolation "worktree". Omit target.projectId to share this thread\'s checkout.',
         );
       }
       const parentRun =
@@ -2845,10 +2845,12 @@ const make = Effect.gen(function* () {
       });
       const isRetryOfAcceptedDelegation = yield* threadManagement.hasReceipt(commandId);
       const target = yield* resolveTargetRechecking({
-        parent,
+        parent: { thread: { ...parent.thread, projectId } },
         target: input.target,
         providers,
-        cwd: yield* parentWorkspaceCwd(parent),
+        cwd: yield* parentWorkspaceCwd(
+          otherProject ? { thread: { ...parent.thread, projectId, worktreePath: null } } : parent,
+        ),
         skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
       });
       const runtimeMode = yield* resolveRuntimeMode(
@@ -2862,21 +2864,29 @@ const make = Effect.gen(function* () {
       );
       let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
       if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
-        const project = yield* requireProject(parent.thread.projectId);
+        const project = yield* requireProject(projectId);
+        // Another project branches from its own checkout: it does not have this thread's commits.
         const base = yield* gitDriver
           .resolveCommit({
-            cwd: parent.thread.worktreePath ?? project.workspaceRoot,
+            cwd: otherProject
+              ? project.workspaceRoot
+              : (parent.thread.worktreePath ?? project.workspaceRoot),
             revision: "HEAD",
           })
           .pipe(
             Effect.mapError(() =>
-              failure("invalid_request", "Unable to resolve the parent checkout commit."),
+              failure(
+                "invalid_request",
+                otherProject
+                  ? `Unable to resolve the checkout commit of project "${project.title}" (${project.workspaceRoot}).`
+                  : "Unable to resolve the parent checkout commit.",
+              ),
             ),
           );
         // Launch preparation creates the worktree from the project root, so a
         // parent checkout in another repository (such as a Git folder inside
         // Scratch) would hand it a commit it cannot find.
-        if (parent.thread.worktreePath !== null) {
+        if (!otherProject && parent.thread.worktreePath !== null) {
           yield* gitDriver
             .resolveCommit({ cwd: project.workspaceRoot, revision: base.commitSha })
             .pipe(
@@ -2912,6 +2922,7 @@ const make = Effect.gen(function* () {
               modelSelection: target.modelSelection,
               runtimeMode,
               interactionMode,
+              ...(otherProject ? { projectId } : {}),
               ...(workspaceStrategy === undefined ? {} : { workspaceStrategy }),
               // Async delegations wake the parent on every child terminal; wait
               // delegations deliver through the blocking tool call until `awaitTask`
