@@ -77,12 +77,17 @@ export function usePullRequestFeed() {
     );
   // A repository one environment hides leaves every environment's copy, including carried rows.
   const repositoryHidden = pullRequestRepositoryHidden(projects, hidesRepository);
+  // Every environment that holds the link hides it, so all of them must be able to clear it.
   const holders = (url: string) =>
-    environments.filter(
-      (environment) =>
-        canWrite(environment.environmentId) &&
-        isPullRequestHidden(hiddenPullRequestUrls([environment.serverConfig?.settings]), url),
+    environments.filter((environment) =>
+      isPullRequestHidden(hiddenPullRequestUrls([environment.serverConfig?.settings]), url),
     );
+  /** The environment that keeps the link hidden because this client cannot clear it there. */
+  const unhideBlockedBy = (url: string) =>
+    holders(url).find(
+      (environment) => !isConnectedWithConfig(environment) || !canWrite(environment.environmentId),
+    )?.label ?? null;
+  const canUnhide = (url: string) => holders(url).length > 0 && unhideBlockedBy(url) === null;
 
   // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const hide = (entry: Pick<EnvironmentPullRequestEntry, "environmentId" | "url">) =>
@@ -94,13 +99,14 @@ export function usePullRequestFeed() {
         }),
     );
 
-  // Every environment that holds the link hides it, so unhiding clears them all.
-  const unhide = (url: string) =>
+  const unhide = (url: string) => {
+    if (!canUnhide(url)) return;
     runPlan(holders(url), (current) =>
       planEnvironmentSettingsPatch(current, {
         hiddenPullRequests: { [hiddenPullRequestKey(url)]: null },
       }),
     );
+  };
 
   // Like Settings' project scope, every environment's copy of the repository gets the rule.
   const setProjectRule = (
@@ -144,7 +150,10 @@ export function usePullRequestFeed() {
             id: "unhide",
             label: "Show in feed",
             separatorBefore: true,
-            disabled: holders(entry.url).length === 0,
+            disabled: !canUnhide(entry.url),
+            ...(unhideBlockedBy(entry.url) === null
+              ? {}
+              : { detail: `Hidden by ${unhideBlockedBy(entry.url)}` }),
           }
         : { id: "hide", label: "Hide from feed", separatorBefore: true, disabled: !writable },
       {
@@ -180,8 +189,6 @@ export function usePullRequestFeed() {
     void openRowMenu(entry, openLabel, position, source);
   });
 
-  const canUnhide = (url: string) => holders(url).length > 0;
-
   return {
     hidden,
     hiddenUrls,
@@ -190,6 +197,7 @@ export function usePullRequestFeed() {
     repositoryHidden,
     unhide,
     canUnhide,
+    unhideBlockedBy,
     showRowMenu,
   };
 }
