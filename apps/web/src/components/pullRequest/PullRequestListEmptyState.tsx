@@ -110,6 +110,11 @@ export function PullRequestListEmptyState({
           </EmptyDescription>
         </EmptyHeader>
         <div className="flex flex-wrap justify-center gap-2">
+          {canLoadMore ? (
+            <Button size="sm" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
+              {loadingMore ? "Loading..." : "Load more pull requests"}
+            </Button>
+          ) : null}
           <Button size="sm" variant="outline" onClick={onClearQuery}>
             <SearchIcon className="size-3.5" />
             Clear search

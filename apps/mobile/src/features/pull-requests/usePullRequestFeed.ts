@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   hiddenPullRequestList,
   hiddenPullRequestUrls,
@@ -8,22 +8,25 @@ import {
   withoutHiddenPullRequest,
 } from "@t3tools/client-runtime/pull-request-feed";
 import { AuthSettingsWriteScope, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
-import { useState } from "react";
+import { use, useState } from "react";
 
 import { readEnvironmentScope } from "../../state/session";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { useSettingsWriter } from "../settings/useSettingsWriter";
+import { shownHiddenList, type PendingHiddenList } from "./pendingHiddenPullRequests";
 
 /** Per-project feed rules and hidden pull requests, read from every environment's settings. */
 export function usePullRequestFeed() {
   const configs = useAtomValue(environmentServerConfigsAtom);
   const writeSettings = useSettingsWriter();
-  // A write replaces the whole list, so the next one must build on it before the server echoes.
-  const [pending, setPending] = useState<ReadonlyMap<EnvironmentId, ReadonlyArray<string>>>(
+  const registry = use(RegistryContext);
+  const [pending, setPending] = useState<ReadonlyMap<EnvironmentId, PendingHiddenList>>(
     () => new Map(),
   );
+  const storedOf = (environmentId: EnvironmentId) =>
+    configs.get(environmentId)?.settings.hiddenPullRequests ?? [];
   const hiddenOf = (environmentId: EnvironmentId) =>
-    pending.get(environmentId) ?? configs.get(environmentId)?.settings.hiddenPullRequests ?? [];
+    shownHiddenList(storedOf(environmentId), pending.get(environmentId));
   const lists = [...configs.keys()].map((environmentId) => ({
     hiddenPullRequests: hiddenOf(environmentId),
   }));
@@ -42,22 +45,34 @@ export function usePullRequestFeed() {
 
   const write = (next: ReadonlyMap<EnvironmentId, ReadonlyArray<string>>) => {
     if (next.size === 0) return;
-    setPending((current) => new Map([...current, ...next]));
+    setPending((current) => {
+      const updated = new Map(current);
+      for (const [environmentId, list] of next) updated.set(environmentId, { list });
+      return updated;
+    });
     void writeSettings(
       [],
       [...next].map(([environmentId, hiddenPullRequests]) => ({
         environmentId,
         patch: { hiddenPullRequests },
       })),
-    ).finally(() =>
+    ).then((failed) => {
+      // Read now: this render's settings may already be older than the reply.
+      const latest = registry.get(environmentServerConfigsAtom);
       setPending((current) => {
-        const settled = new Map(current);
+        const updated = new Map(current);
         for (const [environmentId, list] of next) {
-          if (settled.get(environmentId) === list) settled.delete(environmentId);
+          if (updated.get(environmentId)?.list !== list) continue;
+          if (failed.includes(environmentId)) updated.delete(environmentId);
+          else
+            updated.set(environmentId, {
+              list,
+              savedOver: latest.get(environmentId)?.settings.hiddenPullRequests ?? [],
+            });
         }
-        return settled;
-      }),
-    );
+        return updated;
+      });
+    });
   };
 
   const hide = (entry: { readonly environmentId: EnvironmentId; readonly url: string }) => {

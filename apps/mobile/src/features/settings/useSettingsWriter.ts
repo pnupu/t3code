@@ -40,5 +40,8 @@ export function useSettingsWriter() {
     if (failures.length > 0) {
       Dialog.alert("Could not save settings", failures.join("\n\n"));
     }
+    return writes.flatMap((entry, index) =>
+      outcomes[index] === null ? [] : [entry.environmentId],
+    );
   };
 }

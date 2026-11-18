@@ -528,14 +528,14 @@ const unavailablePlan = (
   unavailableReason: serverWrites.length > 0 ? null : unavailableReason,
 });
 
-/** One project's override, written from outside Settings, such as a list row. */
+/** A project's override, written from outside Settings, such as a list row. */
 export function planProjectOverridePatch(
   environments: readonly ScopedSettingsEnvironment[],
-  project: { readonly id: ProjectId; readonly environmentId: EnvironmentId },
+  members: readonly { readonly id: ProjectId; readonly environmentId: EnvironmentId }[],
   patch: ProjectSettingsOverrides,
 ): ScopedSettingsPlan {
   return unavailablePlan(
-    projectOverrideWrites([project], environments, (current) => ({ ...current, ...patch })),
+    projectOverrideWrites(members, environments, (current) => ({ ...current, ...patch })),
     "Connect this project's environment to save its setting.",
   );
 }
