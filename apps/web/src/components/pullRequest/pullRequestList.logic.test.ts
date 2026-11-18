@@ -740,7 +740,7 @@ describe("the priority groups against a paginated feed", () => {
         partitionsWanted: false,
         feed: {
           scopedToProject,
-          ruleFor: (row) => (row.projectId === "project-1" ? "authored" : "all"),
+          rulesFor: (row) => [row.projectId === "project-1" ? "authored" : "all"],
           hidden: new Set([hiddenRow.url]),
           showHidden: false,
         },
@@ -774,7 +774,7 @@ describe("the priority groups against a paginated feed", () => {
       partitionsWanted: true,
       feed: {
         scopedToProject: false,
-        ruleFor: () => "authored",
+        rulesFor: () => ["authored"],
         hidden: new Set(),
         showHidden: false,
       },
