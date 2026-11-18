@@ -256,7 +256,9 @@ When the list shows all projects, each project adds pull requests by its **Pull 
 rule: **All pull requests**, **Waiting on me** (your review is requested), **Authored by me**, or
 **Hidden**. Set the default in Settings → Source control, and override it for a project with the
 project selector there. On web and desktop you can also right-click a pull request and choose a
-rule for its project. Picking one project in the list's project filter shows all its pull
+rule for its project. When the same repository is a project on several connected environments,
+the list shows a pull request if any of their rules allows it, and **Hidden** on any of them
+hides the repository. Picking one project in the list's project filter shows all its pull
 requests.
 
 To hide one pull request, right-click it on web and desktop, or touch and hold it on mobile, and
