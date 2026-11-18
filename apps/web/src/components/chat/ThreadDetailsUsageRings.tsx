@@ -41,9 +41,10 @@ export function ThreadDetailsUsageRings() {
         .filter((window) => window.kind === "weekly")
         .map((window) => ({
           key: `${pool.driver}:${window.id}`,
-          // "Weekly · Fable" names its model; plain "Weekly" falls back to the provider.
-          name: window.label.replace(/^Weekly(\s*·\s*)?/i, "") || provider,
+          // "Weekly · Fable" and "Go · Weekly" keep their qualifier; plain "Weekly" names the provider.
+          name: window.label.replace(/^Weekly\s*·\s*|\s*·\s*Weekly$|^Weekly$/i, "") || provider,
           title: `${provider} ${window.label}`,
+          left: Math.max(0, Math.min(100, window.remainingPercent)),
           window,
         }));
     })
@@ -68,7 +69,7 @@ export function ThreadDetailsUsageRings() {
           {rings.map((ring, index) => {
             const radius = SIZE / 2 - STROKE / 2 - index * STEP;
             const circumference = 2 * Math.PI * radius;
-            const left = ring.window.remainingPercent;
+            const { left } = ring;
             return (
               <g key={ring.key} className={RING_COLORS[index]}>
                 <circle
@@ -90,7 +91,7 @@ export function ThreadDetailsUsageRings() {
                     strokeWidth={STROKE}
                     strokeLinecap="round"
                     strokeDasharray={circumference}
-                    strokeDashoffset={circumference * (1 - Math.min(100, left) / 100)}
+                    strokeDashoffset={circumference * (1 - left / 100)}
                     className="transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
                   />
                 ) : null}
@@ -100,7 +101,7 @@ export function ThreadDetailsUsageRings() {
         </svg>
         <div className="flex min-w-0 flex-1 flex-col text-xs">
           {rings.map((ring, index) => {
-            const left = ring.window.remainingPercent;
+            const { left } = ring;
             const reset = ring.window.resets.find((entry) => entry.at > now);
             return (
               <Tooltip key={ring.key}>
@@ -138,7 +139,10 @@ export function ThreadDetailsUsageRings() {
                     </span>
                     {reset ? (
                       <span className="text-muted-foreground">
-                        Resets in {formatDuration(reset.at - now)} ·{" "}
+                        {ring.window.members.length > 1
+                          ? `+${reset.restoresPercent}% in `
+                          : "Resets in "}
+                        {formatDuration(reset.at - now)} ·{" "}
                         {formatUpcomingTimestamp(
                           new Date(reset.at).toISOString(),
                           timestampFormat,
