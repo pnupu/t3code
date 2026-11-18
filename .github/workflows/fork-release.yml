@@ -199,7 +199,7 @@ jobs:
       matrix:
         include:
           - label: Linux x64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             platform: linux
             target: AppImage
             arch: x64
