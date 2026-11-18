@@ -41,6 +41,8 @@ import {
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
+import { usePullRequestFeed } from "../pull-requests/usePullRequestFeed";
+import { PULL_REQUEST_FEED_RULES } from "@t3tools/client-runtime/pull-request-feed";
 import { AutoSettleSettingsRows } from "./ThreadSettingsSections";
 import { supportsSharedSettingsSync } from "@t3tools/client-runtime/state/shared-settings";
 import { isSourceControlProviderOffered } from "@t3tools/client-runtime/operations/projects";
@@ -64,7 +66,7 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
     "sidebarAutoSettleOnMerge",
     "sidebarAutoSettleAfterDays",
   ],
-  "source-control": ["defaultAutoPull", "removeAgentCreditsOnMerge"],
+  "source-control": ["defaultAutoPull", "removeAgentCreditsOnMerge", "pullRequestFeed"],
   worktrees: [
     "newWorktreesStartFromOrigin",
     "worktreeSubmodules",
@@ -209,6 +211,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const isMixed = (key: keyof ServerSettings) =>
     reference === null ||
     displayTargets.some((entry) => entry.settings[key] !== reference.settings[key]);
+  const feed = usePullRequestFeed();
   const writeSettings = useSettingsWriter();
   const write = (patch: ServerSettingsPatch) => {
     if (writeInFlight.current) {
@@ -446,6 +449,53 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     onValueChange={(value) => write({ removeAgentCreditsOnMerge: value })}
                   />
                 </SettingsSection>
+                <SettingsSection
+                  title="Pull request feed"
+                  footer={managedSubtitle(
+                    "pullRequestFeed",
+                    projectSelected
+                      ? "Which of this project's pull requests the combined Pull Requests list shows."
+                      : "Which pull requests each project adds to the combined Pull Requests list. Projects can override it.",
+                  )}
+                  trailing={
+                    pendingWrites === 0 && isMixed("pullRequestFeed") ? (
+                      <MixedValuesLabel projectSelected={projectSelected} />
+                    ) : null
+                  }
+                >
+                  {PULL_REQUEST_FEED_RULES.map((option, index) => (
+                    <SettingsChoiceRow
+                      key={option.value}
+                      label={option.label}
+                      selected={
+                        !isMixed("pullRequestFeed") && uniform("pullRequestFeed") === option.value
+                      }
+                      separated={index > 0}
+                      disabled={disabledFor("pullRequestFeed")}
+                      onPress={() => write({ pullRequestFeed: option.value })}
+                    />
+                  ))}
+                </SettingsSection>
+                {projectSelected || feed.hiddenUrls.length === 0 ? null : (
+                  <SettingsSection
+                    title="Hidden pull requests"
+                    footer="Hidden from the Pull Requests list on every environment. Tap one to show it again."
+                  >
+                    {feed.hiddenUrls.map((url) => {
+                      const link = sourceControlClients.parseChangeRequestUrl(url)?.link;
+                      return (
+                        <SettingsRow
+                          key={url}
+                          icon="eye.slash"
+                          label={link ? `${link.repository} #${link.number}` : url}
+                          value="Unhide"
+                          valuePosition="trailing"
+                          onPress={() => feed.unhide(url)}
+                        />
+                      );
+                    })}
+                  </SettingsSection>
+                )}
                 <SettingsSection title="Default branch">
                   <SettingsSwitchRow
                     icon="arrow.down.circle"

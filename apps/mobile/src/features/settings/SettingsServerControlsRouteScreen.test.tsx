@@ -60,6 +60,9 @@ vi.mock("../../state/session", () => ({
     ),
 }));
 vi.mock("../../state/server", () => ({ serverEnvironment: { updateSettings: {} } }));
+vi.mock("../pull-requests/usePullRequestFeed", () => ({
+  usePullRequestFeed: () => ({ hiddenUrls: [], unhide: () => {} }),
+}));
 vi.mock("../../state/environments", () => ({ useEnvironments: () => ({ environments: [] }) }));
 vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: () => mocks.updateSettings,
