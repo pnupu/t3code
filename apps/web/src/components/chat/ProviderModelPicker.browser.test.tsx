@@ -95,7 +95,7 @@ it("keeps each registry image when adding a model from another ACP agent", async
   await vi.waitFor(() => expect(imageWidths()).toEqual([11, 17]));
 });
 
-it("keeps a docked picker open after a pick and hands focus to that model's effort", async () => {
+it("keeps a docked picker open after a pick, hands focus to that model's effort and closes on Enter there", async () => {
   const instanceId = ProviderInstanceId.make("codex");
   const entries = deriveProviderInstanceEntries([
     {
@@ -128,6 +128,7 @@ it("keeps a docked picker open after a pick and hands focus to that model's effo
     second: ["Medium"],
     plain: [],
   };
+  const picked: string[] = [];
 
   function Picker() {
     const [model, setModel] = useState("original");
@@ -149,6 +150,7 @@ it("keeps a docked picker open after a pick and hands focus to that model's effo
             aria-checked={index === all.length - 1}
             data-effort-row
             data-effort-level
+            onClick={() => picked.push(level)}
           >
             {level}
           </button>
@@ -174,6 +176,13 @@ it("keeps a docked picker open after a pick and hands focus to that model's effo
   await expect.element(page.getByRole("radio", { name: "Medium" })).toHaveFocus();
   await userEvent.keyboard("{Escape}");
   await expect.element(search).not.toBeInTheDocument();
+
+  await screen.getByRole("button", { name: "Choose model" }).click();
+  await userEvent.keyboard("{ArrowRight}");
+  await expect.element(page.getByRole("radio", { name: "Medium" })).toHaveFocus();
+  await userEvent.keyboard("{Enter}");
+  await expect.element(search).not.toBeInTheDocument();
+  expect(picked).toEqual(["Medium"]);
 });
 
 it("opens on the active provider when every favorite belongs to a disabled provider", async () => {
