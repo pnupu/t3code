@@ -756,7 +756,6 @@ export function PullRequestsPage() {
   const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const {
-    entries,
     listedPullRequestTabStatuses,
     groups,
     hiddenCount,
@@ -1322,7 +1321,7 @@ export function PullRequestsPage() {
           </Button>
         </div>
       ) : null}
-      {listData?.truncated && entries.length > 0 ? (
+      {listData?.truncated && shownCount > 0 ? (
         <div className="flex justify-center py-3 text-xs text-muted-foreground">
           {loadingMore ? (
             <span className="flex items-center gap-2">

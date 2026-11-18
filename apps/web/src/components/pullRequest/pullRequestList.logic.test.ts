@@ -719,6 +719,35 @@ describe("the priority groups against a paginated feed", () => {
     expect(combined.heldPullRequestsBySurface.size).toBe(2);
     expect(groupsFor(true).entries.map((row) => row.number)).toEqual([2, 1, 3]);
   });
+
+  it("keeps an authored-only project's own row that a later page puts in Others", () => {
+    const fromLaterPage = authoredRow(7001, "2026-08-11T08:00:00Z");
+    const { entries } = pullRequestGroups({
+      known: [fromLaterPage, entry({ number: 7002 })],
+      baseline: undefined,
+      providers: [],
+      viewers: VIEWERS,
+      involvement: "all",
+      localFilters: {},
+      hasLocalFilters: false,
+      text: "",
+      answeredLocally: false,
+      baselineEmpty: false,
+      held: undefined,
+      // The first-page partitions do not hold the row the feed's later page brought.
+      authored: [],
+      reviewing: [],
+      partitionsWanted: true,
+      feed: {
+        scopedToProject: false,
+        ruleFor: () => "authored",
+        hidden: new Set(),
+        showHidden: false,
+      },
+    });
+
+    expect(entries.map((row) => row.number)).toEqual([7001]);
+  });
 });
 
 describe("pull request list overrides", () => {

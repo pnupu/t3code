@@ -34,9 +34,11 @@ import { usePullRequestListControls } from "./usePullRequestListControls";
 import { usePullRequestListActions } from "./usePullRequestListActions";
 import { usePullRequestFeed } from "./usePullRequestFeed";
 import {
+  hiddenPullRequestRepositories,
   isPullRequestHidden,
   pullRequestFeedGroup,
   pullRequestFeedVisibility,
+  pullRequestRepositoryKey,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   filterPullRequestList,
@@ -199,6 +201,8 @@ export function PullRequestsScreen(
   const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
+  // Read before the list merges copies, so a repository hidden on one environment leaves them all.
+  const hiddenRepositories = hiddenPullRequestRepositories(result.entries, feed.ruleFor);
   const visibilities = entries.map((entry) =>
     pullRequestFeedVisibility(
       entry,
@@ -208,6 +212,7 @@ export function PullRequestsScreen(
         involvement: controls.involvement,
         ruleFor: feed.ruleFor,
         hidden: feed.hidden,
+        repositoryHidden: (row) => hiddenRepositories.has(pullRequestRepositoryKey(row)),
       },
     ),
   );

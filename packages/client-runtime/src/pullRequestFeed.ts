@@ -112,6 +112,29 @@ export interface PullRequestFeedOptions<Entry> {
   readonly involvement: PullRequestInvolvement;
   readonly ruleFor: (entry: Entry) => PullRequestFeedRule;
   readonly hidden: ReadonlySet<string>;
+  /** The row's own group, when the list may file it under another one. */
+  readonly groupOf?: (entry: Entry) => PullRequestFeedGroup;
+  /** A repository another environment's project hides, read before copies merge. */
+  readonly repositoryHidden?: (entry: Entry) => boolean;
+}
+
+export const pullRequestRepositoryKey = (entry: {
+  readonly host: string;
+  readonly repository: string;
+}): string => `${entry.host.toLowerCase()} ${entry.repository.toLowerCase()}`;
+
+/** Repositories some environment's `hidden` project lists, keyed by host and repository. */
+export function hiddenPullRequestRepositories<
+  Entry extends { readonly host: string; readonly repository: string },
+>(
+  entries: ReadonlyArray<Entry>,
+  ruleFor: (entry: Entry) => PullRequestFeedRule,
+): ReadonlySet<string> {
+  return new Set(
+    entries.flatMap((entry) =>
+      ruleFor(entry) === "hidden" ? [pullRequestRepositoryKey(entry)] : [],
+    ),
+  );
 }
 
 /** `rule` drops the row silently; `hidden` is a row the user hid and can show again. */
@@ -120,11 +143,14 @@ export function pullRequestFeedVisibility<Entry extends { readonly url: string }
   group: PullRequestFeedGroup,
   options: PullRequestFeedOptions<Entry>,
 ): "shown" | "rule" | "hidden" {
-  if (
-    !options.scopedToProject &&
-    !pullRequestFeedShows(options.ruleFor(entry), group, options.involvement)
-  ) {
-    return "rule";
+  if (!options.scopedToProject) {
+    const rule = options.ruleFor(entry);
+    const admitted =
+      options.repositoryHidden?.(entry) !== true &&
+      (pullRequestFeedShows(rule, group, options.involvement) ||
+        (options.groupOf !== undefined &&
+          pullRequestFeedShows(rule, options.groupOf(entry), options.involvement)));
+    if (!admitted) return "rule";
   }
   return isPullRequestHidden(options.hidden, entry.url) ? "hidden" : "shown";
 }
