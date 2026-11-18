@@ -526,6 +526,13 @@ describe("evaluatePullRequestWatch", () => {
       evaluatePullRequestWatch(settled.next, detail({ checks: reviewed }), noRemarks).changes,
       [],
     );
+    // An unavailable approval read must not swallow the finish for good.
+    const unavailable = { ...check("Workflow approval status", "pending"), placeholder: true };
+    const unread = detail({ checks: [...reviewed, unavailable] });
+    assert.deepEqual(
+      evaluatePullRequestWatch(test.next, unread, noRemarks).changes,
+      settled.changes,
+    );
 
     const rerun = evaluatePullRequestWatch(test.next, first, noRemarks);
     assert.equal(evaluatePullRequestWatch(rerun.next, second, noRemarks).changes.length, 1);
@@ -539,6 +546,10 @@ describe("evaluatePullRequestWatch", () => {
       { kind: "checks-failed", failed: [check("lint", "failure")] },
       { kind: "checks-awaiting-approval", checks: [approval] },
     ]);
+    const gatedRunning = detail({ checks: [...gated.checks, check("test", "pending")] });
+    const held = evaluatePullRequestWatch(watch(), gatedRunning, noRemarks).next;
+    const gatedDone = detail({ checks: [...gated.checks, check("test", "success")] });
+    assert.deepEqual(evaluatePullRequestWatch(held, gatedDone, noRemarks).changes, []);
   });
 
   it("reports passed once the required checks pass, whatever the others do", () => {
