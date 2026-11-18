@@ -806,7 +806,7 @@ export function PullRequestsPage() {
     partitionsWanted,
     feed: {
       scopedToProject: scopedProjectId !== undefined,
-      ruleFor: feed.ruleFor,
+      rulesFor: feed.rulesFor,
       hidden: feed.hidden,
       repositoryHidden: feed.repositoryHidden,
       showHidden,
@@ -1345,7 +1345,8 @@ export function PullRequestsPage() {
           </Button>
         </div>
       ) : null}
-      {listData?.truncated && shownCount > 0 ? (
+      {/* The error view replaces an emptied page, so it keeps this footer's way to more pages. */}
+      {listData?.truncated && (shownCount > 0 || listError !== null) ? (
         <div className="flex justify-center py-3 text-xs text-muted-foreground">
           {loadingMore ? (
             <span className="flex items-center gap-2">

@@ -56,6 +56,14 @@ export function usePullRequestFeed() {
     configs.get(environmentId)?.environment.capabilities.pullRequestFeed === true &&
     readEnvironmentScope(environmentId, AuthSettingsWriteScope);
 
+  /** As on web: connected, with its server config. */
+  const isConnected = (environmentId: EnvironmentId) =>
+    configs.has(environmentId) &&
+    environments.some(
+      (environment) =>
+        environment.environmentId === environmentId && environment.connectionState === "connected",
+    );
+
   /** The one rule for which projects hide their repository, the same as on web. */
   const hidesRepository = (project: {
     readonly environmentId: EnvironmentId;
@@ -63,16 +71,7 @@ export function usePullRequestFeed() {
   }) =>
     pullRequestProjectHidesRepository(
       ruleFor({ environmentId: project.environmentId, projectId: project.id }),
-      {
-        // As on web: connected, with its server config.
-        connected:
-          configs.has(project.environmentId) &&
-          environments.some(
-            (environment) =>
-              environment.environmentId === project.environmentId &&
-              environment.connectionState === "connected",
-          ),
-      },
+      { connected: isConnected(project.environmentId) },
     );
 
   // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
@@ -156,6 +155,7 @@ export function usePullRequestFeed() {
     hidden,
     hiddenUrls,
     ruleFor,
+    isConnected,
     hidesRepository,
     canHide,
     canUnhide,
