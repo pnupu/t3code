@@ -38,6 +38,7 @@ import {
   pullRequestFeedGroup,
   pullRequestFeedVisibility,
   pullRequestRepositoryHidden,
+  pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   filterPullRequestList,
@@ -185,38 +186,42 @@ export function PullRequestsScreen(
   const sidebar = props.sidebar === true || (primaryColumn !== null && paneRole === "sidebar");
   const selectedKey = props.selectedPullRequestKey ?? primaryColumn?.selectedPullRequestKey;
   const connectedKey = connectedTargets.map((target) => target.environmentId).join("\n");
+  const entries = useMemo(
+    () =>
+      filterPullRequestList(
+        result.entries,
+        controls,
+        result.data?.viewers ?? {},
+        query,
+        result.data.localSearchHosts,
+        new Set(connectedKey.split("\n")),
+      ),
+    [result.entries, controls, query, result.data, connectedKey],
+  );
   const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
   const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
-  const visibilityOf = (entry: EnvironmentPullRequestListEntry) =>
+  // A pull request shows when any connected copy of its repository allows it, as on web.
+  const rulesFor = pullRequestRepositoryRules(
+    allProjects,
+    (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+    (project) => feed.isConnected(project.environmentId),
+    feed.ruleFor,
+  );
+  const visibilities = entries.map((entry) =>
     pullRequestFeedVisibility(
       entry,
       pullRequestFeedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`]),
       {
         scopedToProject: Boolean(controls.projectId),
         involvement: controls.involvement,
-        ruleFor: feed.ruleFor,
+        rulesFor,
         hidden: feed.hidden,
         repositoryHidden,
       },
-    );
-  // Each copy meets its own environment's rule before copies merge, so a pull request shows when
-  // any copy passes. The React Compiler memoizes the merge on this string while the rules hold.
-  const visibilityByEntry = new Map(result.entries.map((entry) => [entry, visibilityOf(entry)]));
-  const ruledOut = result.entries
-    .flatMap((entry) => (visibilityByEntry.get(entry) === "rule" ? [pullRequestKey(entry)] : []))
-    .join("\n");
-  const ruledOutKeys = new Set(ruledOut.split("\n"));
-  const entries = filterPullRequestList(
-    result.entries.filter((entry) => !ruledOutKeys.has(pullRequestKey(entry))),
-    controls,
-    viewers,
-    query,
-    result.data.localSearchHosts,
-    new Set(connectedKey.split("\n")),
+    ),
   );
-  const visibilities = entries.map((entry) => visibilityByEntry.get(entry) ?? visibilityOf(entry));
   const hiddenCount = visibilities.filter((visibility) => visibility === "hidden").length;
   // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
   if (showHidden && feed.hidden.size === 0) setShowHidden(false);

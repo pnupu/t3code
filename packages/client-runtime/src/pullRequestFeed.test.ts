@@ -9,6 +9,7 @@ import {
   pullRequestFeedVisibility,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
+  pullRequestRepositoryRules,
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
@@ -66,7 +67,7 @@ describe("pull request feed rules", () => {
     const rules: Record<string, PullRequestFeedRule> = { [projectA]: "authored" };
     const options = {
       involvement: "all" as const,
-      ruleFor: (entry: { projectId: ProjectId }) => rules[entry.projectId] ?? "all",
+      rulesFor: (entry: { projectId: ProjectId }) => [rules[entry.projectId] ?? "all"],
       hidden: new Set(["https://h/b/3"]),
     };
 
@@ -98,7 +99,7 @@ describe("pull request feed rules", () => {
       pullRequestFeedVisibility({ url: "https://h/a/1" }, listGroup, {
         scopedToProject: false,
         involvement: "all",
-        ruleFor: () => rule,
+        rulesFor: () => [rule],
         hidden: new Set(),
         groupOf: () => ownGroup,
       }),
@@ -130,7 +131,7 @@ describe("pull request feed rules", () => {
     const options = {
       scopedToProject: false,
       involvement: "all" as const,
-      ruleFor: () => "all" as const,
+      rulesFor: () => ["all" as const],
       hidden: new Set<string>(),
       repositoryHidden,
     };
@@ -146,6 +147,30 @@ describe("pull request feed rules", () => {
     ]);
     expect(
       pullRequestFeedVisibility(rows[1]!, "others", { ...options, scopedToProject: true }),
+    ).toBe("shown");
+  });
+
+  it("shows a row when any copy of its repository allows it", () => {
+    const project = (environmentId: string, id: string) => ({
+      id: ProjectId.make(id),
+      environmentId,
+      repositoryIdentity: { canonicalKey: "github.com/x/a" },
+    });
+    const rulesFor = pullRequestRepositoryRules(
+      [project("env-1", "a1"), project("env-2", "a2")],
+      (candidate) => (candidate.environmentId === "env-1" ? "authored" : "all"),
+      () => true,
+      () => "authored",
+    );
+    const row = { environmentId: "env-1", projectId: ProjectId.make("a1"), url: "https://h/a/9" };
+    // Another author's pull request, read through the authored-only copy.
+    expect(
+      pullRequestFeedVisibility(row, "others", {
+        scopedToProject: false,
+        involvement: "all",
+        rulesFor,
+        hidden: new Set(),
+      }),
     ).toBe("shown");
   });
 
