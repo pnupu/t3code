@@ -40,7 +40,6 @@ import {
   pullRequestProjectQueries,
   type PullRequestHostAvailability,
 } from "./pullRequestProjectAssignment.logic";
-import { pullRequestFeedRule } from "@t3tools/client-runtime/pull-request-feed";
 import { pullRequestFilterProjects } from "@t3tools/client-runtime/pull-request-project-filter";
 import { pullRequestListEntryId } from "./pullRequestListGroups.logic";
 
@@ -68,6 +67,8 @@ const UNREACHABLE_PHASES: ReadonlySet<EnvironmentConnectionPhase> = new Set([
 export function usePullRequestScope(
   search: PullRequestsSearch,
   hostAvailability: PullRequestHostAvailability,
+  /** Projects whose `hidden` feed rule leaves their repository out of every query. */
+  hidesRepository: (project: { environmentId: EnvironmentId; id: ProjectId }) => boolean,
 ) {
   const { environments } = useEnvironments();
   const allProjects = useProjects();
@@ -147,13 +148,7 @@ export function usePullRequestScope(
       queryEnvironmentIds,
       availability,
       unreachable,
-      (project) =>
-        pullRequestFeedRule(
-          capableEnvironments.find(
-            (environment) => environment.environmentId === project.environmentId,
-          )?.serverConfig?.settings,
-          project.id,
-        ) === "hidden",
+      hidesRepository,
     );
   };
   const environmentQueries = queriesFor(hostAvailability);

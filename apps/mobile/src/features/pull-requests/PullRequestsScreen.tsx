@@ -200,11 +200,7 @@ export function PullRequestsScreen(
   const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
-  const repositoryHidden = pullRequestRepositoryHidden(
-    allProjects,
-    (project) =>
-      feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) === "hidden",
-  );
+  const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
   const visibilities = entries.map((entry) =>
     pullRequestFeedVisibility(
       entry,

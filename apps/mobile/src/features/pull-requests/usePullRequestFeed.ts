@@ -1,30 +1,43 @@
-import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import {
   hiddenPullRequestList,
   hiddenPullRequestUrls,
   isPullRequestHidden,
   pullRequestFeedRule,
+  pullRequestProjectHidesRepository,
   withHiddenPullRequest,
   withoutHiddenPullRequest,
 } from "@t3tools/client-runtime/pull-request-feed";
 import { AuthSettingsWriteScope, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
-import { use, useState } from "react";
+import { useState } from "react";
 
 import { readEnvironmentScope } from "../../state/session";
 import { environmentServerConfigsAtom } from "../../state/server";
+import { useWorkspaceState } from "../../state/workspace";
 import { useSettingsWriter } from "../settings/useSettingsWriter";
-import { shownHiddenList, type PendingHiddenList } from "./pendingHiddenPullRequests";
+import {
+  settledHiddenSaves,
+  shownHiddenList,
+  type PendingHiddenList,
+} from "./pendingHiddenPullRequests";
 
 /** Per-project feed rules and hidden pull requests, read from every environment's settings. */
 export function usePullRequestFeed() {
   const configs = useAtomValue(environmentServerConfigsAtom);
   const writeSettings = useSettingsWriter();
-  const registry = use(RegistryContext);
   const [pending, setPending] = useState<ReadonlyMap<EnvironmentId, PendingHiddenList>>(
     () => new Map(),
   );
   const storedOf = (environmentId: EnvironmentId) =>
     configs.get(environmentId)?.settings.hiddenPullRequests ?? [];
+  const settled = settledHiddenSaves(pending, storedOf);
+  if (settled.length > 0) {
+    setPending((current) => {
+      const updated = new Map(current);
+      for (const environmentId of settled) updated.delete(environmentId);
+      return updated;
+    });
+  }
   const hiddenOf = (environmentId: EnvironmentId) =>
     shownHiddenList(storedOf(environmentId), pending.get(environmentId));
   const lists = [...configs.keys()].map((environmentId) => ({
@@ -43,11 +56,33 @@ export function usePullRequestFeed() {
     configs.get(environmentId)?.environment.capabilities.pullRequestFeed === true &&
     readEnvironmentScope(environmentId, AuthSettingsWriteScope);
 
+  const { environments } = useWorkspaceState();
+  /** The one rule for which projects hide their repository, the same as on web. */
+  const hidesRepository = (project: {
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+  }) =>
+    pullRequestProjectHidesRepository(
+      ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+      {
+        connected: environments.some(
+          (environment) =>
+            environment.environmentId === project.environmentId &&
+            environment.connectionState === "connected",
+        ),
+        writable: canHide(project.environmentId),
+      },
+    );
+
   const write = (next: ReadonlyMap<EnvironmentId, ReadonlyArray<string>>) => {
     if (next.size === 0) return;
     setPending((current) => {
       const updated = new Map(current);
-      for (const [environmentId, list] of next) updated.set(environmentId, { list });
+      for (const [environmentId, list] of next)
+        updated.set(environmentId, {
+          list,
+          sentOver: current.get(environmentId)?.sentOver ?? storedOf(environmentId),
+        });
       return updated;
     });
     void writeSettings(
@@ -59,23 +94,16 @@ export function usePullRequestFeed() {
     )
       // A rejected write saved nothing either.
       .catch(() => [...next.keys()])
-      .then((failed) => {
-        // Read now: this render's settings may already be older than the reply.
-        const latest = registry.get(environmentServerConfigsAtom);
+      .then((failed) =>
         setPending((current) => {
           const updated = new Map(current);
           for (const [environmentId, list] of next) {
-            if (updated.get(environmentId)?.list !== list) continue;
-            if (failed.includes(environmentId)) updated.delete(environmentId);
-            else
-              updated.set(environmentId, {
-                list,
-                savedOver: latest.get(environmentId)?.settings.hiddenPullRequests ?? [],
-              });
+            if (failed.includes(environmentId) && updated.get(environmentId)?.list === list)
+              updated.delete(environmentId);
           }
           return updated;
-        });
-      });
+        }),
+      );
   };
 
   const hide = (entry: { readonly environmentId: EnvironmentId; readonly url: string }) => {
@@ -110,5 +138,5 @@ export function usePullRequestFeed() {
 
   const canUnhide = (url: string) => holders(url).length > 0;
 
-  return { hidden, hiddenUrls, ruleFor, canHide, canUnhide, hide, unhide };
+  return { hidden, hiddenUrls, ruleFor, hidesRepository, canHide, canUnhide, hide, unhide };
 }

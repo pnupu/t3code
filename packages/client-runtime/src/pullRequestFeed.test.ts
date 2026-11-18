@@ -5,6 +5,7 @@ import {
   filterPullRequestFeed,
   hiddenPullRequestList,
   pullRequestFeedVisibility,
+  pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
   pullRequestFeedGroup,
   pullRequestFeedRule,
@@ -102,6 +103,15 @@ describe("pull request feed rules", () => {
         groupOf: () => ownGroup,
       }),
     ).toBe(shown ? "shown" : "rule");
+  });
+
+  it.each<[string, PullRequestFeedRule, boolean, boolean, boolean]>([
+    ["a connected, writable holder hides", "hidden", true, true, true],
+    ["an offline holder does not", "hidden", false, true, false],
+    ["a read-only holder does not", "hidden", true, false, false],
+    ["another rule does not", "authored", true, true, false],
+  ])("%s its repository", (_, rule, connected, writable, hides) => {
+    expect(pullRequestProjectHidesRepository(rule, { connected, writable })).toBe(hides);
   });
 
   it("rules out every environment's copy of a repository one environment hides", () => {
