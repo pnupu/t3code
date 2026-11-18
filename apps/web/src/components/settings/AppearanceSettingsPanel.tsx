@@ -67,6 +67,15 @@ function environmentIdentificationOptions(
       ["none", msg("None")],
     ];
   }
+  if (stageVariant === "fork") {
+    return [
+      ["artwork", msg("Fork artwork")],
+      ["nightly-artwork", msg("Nightly artwork")],
+      ["dev-artwork", msg("Dev artwork")],
+      ["pill", msg("Version pill")],
+      ["none", msg("None")],
+    ];
+  }
   return [
     ["artwork", msg("None")],
     ["nightly-artwork", msg("Nightly artwork")],
@@ -124,7 +133,7 @@ export function AppearanceSettingsPanel() {
       ? gt("Only built-in themes show artwork, so this theme shows the version pill.")
       : gt("Only built-in themes show artwork.")
     : environmentStageVariant
-      ? gt("Choose how Dev and Nightly environments are identified.")
+      ? gt("Choose how Dev, Nightly, and Fork environments are identified.")
       : gt("Show Dev or Nightly artwork in the sidebar header.");
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
