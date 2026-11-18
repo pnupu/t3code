@@ -160,8 +160,7 @@ export function evaluatePullRequestWatch(
     ) {
       changes.push({ kind: "checks-finished", failed, ...(unread && { approvalUnknown: true }) });
     }
-    // An approval hold keeps the list, so checks that finish behind it are still news after it.
-    if (awaitingApproval.length === 0) finishedChecks = finishedNow;
+    finishedChecks = finishedNow;
   }
   const required = checks.filter((check) => check.required === true);
   const gate = required.length > 0 ? required : checks;
