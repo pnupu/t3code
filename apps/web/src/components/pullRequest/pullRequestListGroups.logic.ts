@@ -1,5 +1,6 @@
 import {
   filterPullRequestFeed,
+  pullRequestFeedGroup,
   type PullRequestFeedOptions,
 } from "@t3tools/client-runtime/pull-request-feed";
 import type {
@@ -122,7 +123,12 @@ export function pullRequestGroups({
   const { groups, hiddenCount, ruledOutCount } =
     feed === undefined
       ? { groups: grouped, hiddenCount: 0, ruledOutCount: 0 }
-      : filterPullRequestFeed(grouped, { ...feed, involvement });
+      : filterPullRequestFeed(grouped, {
+          ...feed,
+          involvement,
+          // Rows a later page brings land in Others when the first-page partitions miss them.
+          groupOf: (entry) => pullRequestFeedGroup(entry, pullRequestEntryViewer(entry, viewers)),
+        });
   const entries =
     groups === grouped
       ? searched
