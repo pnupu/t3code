@@ -185,23 +185,11 @@ export function PullRequestsScreen(
   const sidebar = props.sidebar === true || (primaryColumn !== null && paneRole === "sidebar");
   const selectedKey = props.selectedPullRequestKey ?? primaryColumn?.selectedPullRequestKey;
   const connectedKey = connectedTargets.map((target) => target.environmentId).join("\n");
-  const entries = useMemo(
-    () =>
-      filterPullRequestList(
-        result.entries,
-        controls,
-        result.data?.viewers ?? {},
-        query,
-        result.data.localSearchHosts,
-        new Set(connectedKey.split("\n")),
-      ),
-    [result.entries, controls, query, result.data, connectedKey],
-  );
   const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
   const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
-  const visibilities = entries.map((entry) =>
+  const visibilityOf = (entry: EnvironmentPullRequestListEntry) =>
     pullRequestFeedVisibility(
       entry,
       pullRequestFeedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`]),
@@ -212,8 +200,22 @@ export function PullRequestsScreen(
         hidden: feed.hidden,
         repositoryHidden,
       },
-    ),
+    );
+  // Each copy meets its own environment's rule before copies merge, so a pull request shows when
+  // any copy passes. A string key keeps the merged list memoized while the rules hold still.
+  const ruledOut = result.entries
+    .flatMap((entry) => (visibilityOf(entry) === "rule" ? [pullRequestKey(entry)] : []))
+    .join("\n");
+  const ruledOutKeys = new Set(ruledOut.split("\n"));
+  const entries = filterPullRequestList(
+    result.entries.filter((entry) => !ruledOutKeys.has(pullRequestKey(entry))),
+    controls,
+    result.data?.viewers ?? {},
+    query,
+    result.data.localSearchHosts,
+    new Set(connectedKey.split("\n")),
   );
+  const visibilities = entries.map(visibilityOf);
   const hiddenCount = visibilities.filter((visibility) => visibility === "hidden").length;
   // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
   if (showHidden && feed.hidden.size === 0) setShowHidden(false);

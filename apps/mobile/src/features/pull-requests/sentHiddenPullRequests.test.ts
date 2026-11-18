@@ -2,29 +2,24 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { sentHiddenPullRequestApplies } from "./sentHiddenPullRequests";
 
-describe("a hide sent from this device", () => {
-  it("shows while in flight and after the reply, until the settings push arrives", () => {
-    const before = { hiddenPullRequests: {} };
-    const sent = { url: "https://h/a/1" };
-    expect(sentHiddenPullRequestApplies(sent, () => before)).toBe(true);
-    const saved = { ...sent, settledOver: new Map([["env-1", before]]) };
-    // The reply came first: the environment still holds the settings it had.
-    expect(sentHiddenPullRequestApplies(saved, () => before)).toBe(true);
-    expect(sentHiddenPullRequestApplies(saved, () => ({ hiddenPullRequests: {} }))).toBe(false);
+describe("a hide or unhide sent from this device", () => {
+  const key = "https://h/a/1";
+  const shown = { hiddenPullRequests: {} };
+  const hidden = { hiddenPullRequests: { [key]: key } };
+
+  it("ends when the settings show it, even if the push beat the reply", () => {
+    const sent = { url: key, targets: new Map([["env-1", {}]]) };
+    expect(sentHiddenPullRequestApplies(sent, key, () => shown)).toBe(true);
+    expect(sentHiddenPullRequestApplies(sent, key, () => hidden)).toBe(false);
   });
 
-  it("shows an unhide across two holders until both have pushed", () => {
-    const a = { hiddenPullRequests: {} };
-    const b = { hiddenPullRequests: {} };
-    const sent = {
-      url: null,
-      settledOver: new Map([
-        ["env-a", a],
-        ["env-b", b],
-      ]),
-    };
-    const pushed = (id: string) => (id === "env-a" ? { hiddenPullRequests: {} } : b);
-    expect(sentHiddenPullRequestApplies(sent, pushed)).toBe(true);
-    expect(sentHiddenPullRequestApplies(sent, () => ({ hiddenPullRequests: {} }))).toBe(false);
+  it("does not mask another client's re-hide after the unhide was confirmed", () => {
+    const sent = { url: null, targets: new Map([["env-1", { repliedOver: hidden }]]) };
+    // The reply came before the push: the stale settings still hide the link.
+    expect(sentHiddenPullRequestApplies(sent, key, () => hidden)).toBe(true);
+    // Another client hides it again; any update after the reply is authoritative.
+    expect(
+      sentHiddenPullRequestApplies(sent, key, () => ({ hiddenPullRequests: { [key]: key } })),
+    ).toBe(false);
   });
 });
