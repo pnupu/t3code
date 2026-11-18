@@ -26,6 +26,7 @@ import { readEnvironmentScope } from "~/state/session";
 
 import {
   applyPendingScopedWrites,
+  isConnectedWithConfig,
   pendingScopedWritesAtom,
   planEnvironmentSettingsPatch,
   planProjectOverridePatch,
@@ -59,9 +60,16 @@ export function usePullRequestFeed() {
     pullRequestFeedRule(settingsOf(entry.environmentId), entry.projectId);
   const projects = useProjects();
   // A repository one environment hides leaves every environment's copy, including carried rows.
+  // Only connected environments count, so a rule this client cannot change cannot trap it.
+  const connected = new Set(
+    environments.flatMap((environment) =>
+      isConnectedWithConfig(environment) ? [environment.environmentId] : [],
+    ),
+  );
   const repositoryHidden = pullRequestRepositoryHidden(
     projects,
     (project) =>
+      connected.has(project.environmentId) &&
       ruleFor({ environmentId: project.environmentId, projectId: project.id }) === "hidden",
   );
 
@@ -111,7 +119,9 @@ export function usePullRequestFeed() {
       ),
     );
     const members = key
-      ? projects.filter((candidate) => repositoryKeyOf(candidate) === key)
+      ? projects.filter(
+          (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
+        )
       : [{ id: project.projectId, environmentId: project.environmentId }];
     runPlan(environments, (current) =>
       planProjectOverridePatch(current, members, { pullRequestFeed: rule }),
