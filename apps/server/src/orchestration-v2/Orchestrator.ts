@@ -5328,6 +5328,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                       ...(existing.endedWatch?.awaitingApproval !== undefined && {
                         awaitingApproval: existing.endedWatch.awaitingApproval,
                       }),
+                      ...(existing.endedWatch?.finishedChecks !== undefined && {
+                        finishedChecks: existing.endedWatch.finishedChecks,
+                      }),
                       ...(existing.endedWatch?.approvalAnnounced !== undefined && {
                         approvalAnnounced: existing.endedWatch.approvalAnnounced,
                       }),

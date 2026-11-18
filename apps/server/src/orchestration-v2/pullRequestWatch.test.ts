@@ -526,12 +526,34 @@ describe("evaluatePullRequestWatch", () => {
       evaluatePullRequestWatch(settled.next, detail({ checks: reviewed }), noRemarks).changes,
       [],
     );
-    // An unavailable approval read must not swallow the finish for good.
+    // A push elsewhere in the thread drops the pending answer; the finish is still news.
+    const { checksPending: _dropped, ...reopened } = test.next;
+    assert.deepEqual(
+      evaluatePullRequestWatch(reopened, detail({ checks: reviewed }), noRemarks).changes,
+      settled.changes,
+    );
+    // So is a bot first seen already finished.
+    const failedOnly = detail({ checks: [check("lint", "failure"), check("test", "failure")] });
+    const unseen = evaluatePullRequestWatch(watch(), failedOnly, noRemarks).next;
+    assert.deepEqual(
+      evaluatePullRequestWatch(unseen, detail({ checks: reviewed }), noRemarks).changes,
+      settled.changes,
+    );
+    // A read that cannot tell whether workflows await approval still tells, and says so.
     const unavailable = { ...check("Workflow approval status", "pending"), placeholder: true };
     const unread = detail({ checks: [...reviewed, unavailable] });
+    assert.deepEqual(evaluatePullRequestWatch(test.next, unread, noRemarks).changes, [
+      {
+        kind: "checks-finished",
+        failed: [check("lint", "failure"), check("test", "failure")],
+        approvalUnknown: true,
+      },
+    ]);
+    // A watch saved before finished names were kept learns them without waking.
+    const { finishedChecks: _legacy, ...legacy } = settled.next;
     assert.deepEqual(
-      evaluatePullRequestWatch(test.next, unread, noRemarks).changes,
-      settled.changes,
+      evaluatePullRequestWatch(legacy, detail({ checks: reviewed }), noRemarks).changes,
+      [],
     );
 
     const rerun = evaluatePullRequestWatch(test.next, first, noRemarks);
@@ -985,6 +1007,15 @@ describe("evaluatePullRequestWatch", () => {
     const comments = [remark("reviewer", "2026-10-02T12:10:00Z")];
     const tired = watch({ headSha: "aaaaaaaaaa", wakes: PULL_REQUEST_WATCH_WAKE_LIMIT - 1 });
     assert.isTrue(evaluatePullRequestWatch(tired, detail(), comments).exhausted);
+    // A bot that reruns its check with each comment is still a comment loop.
+    const rerun = { ...tired, failedChecks: ["lint"], checksPending: true };
+    const rerunDone = detail({ checks: [check("lint", "failure"), check("bot", "success")] });
+    const looped = evaluatePullRequestWatch(rerun, rerunDone, comments);
+    assert.deepEqual(
+      looped.changes.map((change) => change.kind),
+      ["checks-finished", "remarks"],
+    );
+    assert.isTrue(looped.exhausted);
     const pushed = evaluatePullRequestWatch(tired, detail({ headSha: "cccccccccc" }), comments);
     assert.isFalse(pushed.exhausted);
     assert.equal(pushed.next.wakes, 1);
