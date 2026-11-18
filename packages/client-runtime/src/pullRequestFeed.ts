@@ -71,15 +71,24 @@ type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefi
 /** The key a hidden link is stored under; hiding or unhiding patches only this key. */
 export const hiddenPullRequestKey = (url: string): string => url.toLowerCase();
 
-/** Every environment's hidden links, so a pull request stays hidden when another serves it. */
-export function hiddenPullRequestUrls(settings: Iterable<HiddenSettings>): ReadonlySet<string> {
-  const urls = new Set<string>();
+/**
+ * Every environment's hidden links, keyed by `hiddenPullRequestKey`, each in the spelling it was
+ * hidden with, so a pull request stays hidden when another environment serves it.
+ */
+export function hiddenPullRequestLinks(
+  settings: Iterable<HiddenSettings>,
+): ReadonlyMap<string, string> {
+  const links = new Map<string, string>();
   for (const entry of settings) {
-    for (const url of Object.keys(entry?.hiddenPullRequests ?? {})) {
-      urls.add(hiddenPullRequestKey(url));
+    for (const [key, url] of Object.entries(entry?.hiddenPullRequests ?? {})) {
+      if (!links.has(hiddenPullRequestKey(key))) links.set(hiddenPullRequestKey(key), url);
     }
   }
-  return urls;
+  return links;
+}
+
+export function hiddenPullRequestUrls(settings: Iterable<HiddenSettings>): ReadonlySet<string> {
+  return new Set(hiddenPullRequestLinks(settings).keys());
 }
 
 export function isPullRequestHidden(hidden: ReadonlySet<string>, url: string): boolean {

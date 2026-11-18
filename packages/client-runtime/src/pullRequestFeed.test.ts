@@ -3,6 +3,7 @@ import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t
 
 import {
   filterPullRequestFeed,
+  hiddenPullRequestLinks,
   hiddenPullRequestUrls,
   isPullRequestHidden,
   pullRequestFeedVisibility,
@@ -149,12 +150,17 @@ describe("pull request feed rules", () => {
   });
 
   it("reads every environment's hidden links, regardless of case", () => {
-    const hidden = hiddenPullRequestUrls([
-      { hiddenPullRequests: { "https://h/a/1": true } },
+    const settings = [
+      { hiddenPullRequests: { "https://h/a/1": "https://H/A/1" } },
       null,
-      { hiddenPullRequests: { "https://h/b/2": true } },
+      {
+        hiddenPullRequests: { "https://H/A/1": "https://h/a/1", "https://h/b/2": "https://h/b/2" },
+      },
+    ];
+    expect([...hiddenPullRequestLinks(settings)]).toEqual([
+      ["https://h/a/1", "https://H/A/1"],
+      ["https://h/b/2", "https://h/b/2"],
     ]);
-    expect([...hidden]).toEqual(["https://h/a/1", "https://h/b/2"]);
-    expect(isPullRequestHidden(hidden, "https://H/A/1")).toBe(true);
+    expect(isPullRequestHidden(hiddenPullRequestUrls(settings), "https://h/A/1")).toBe(true);
   });
 });

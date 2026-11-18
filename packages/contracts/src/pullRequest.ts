@@ -69,15 +69,15 @@ export type PullRequestFeedRule = typeof PullRequestFeedRule.Type;
 
 const HiddenPullRequestUrl = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048));
 /**
- * Pull request URLs hidden from the feed, lowercased. A record, not a list, so each hide or unhide
- * patches one key and concurrent writers cannot erase each other.
+ * Pull requests hidden from the feed: the lowercased URL maps to the URL as the user hid it. A
+ * record, not a list, so each hide or unhide patches one key and writers cannot erase each other.
  */
-export const HiddenPullRequests = Schema.Record(HiddenPullRequestUrl, Schema.Literal(true));
+export const HiddenPullRequests = Schema.Record(HiddenPullRequestUrl, HiddenPullRequestUrl);
 export type HiddenPullRequests = typeof HiddenPullRequests.Type;
-/** `true` hides a link, `null` shows it again. */
+/** A URL hides that link, `null` shows it again. */
 export const HiddenPullRequestsPatch = Schema.Record(
   HiddenPullRequestUrl,
-  Schema.NullOr(Schema.Literal(true)),
+  Schema.NullOr(HiddenPullRequestUrl),
 );
 
 export const PullRequestAction = Schema.Literals([
