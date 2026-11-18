@@ -206,11 +206,13 @@ export function PullRequestsScreen(
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
   const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
-  // A pull request shows when any connected copy of its repository allows it, as on web.
+  // A pull request shows when any copy in the list's scope allows it, as on web.
   const rulesFor = pullRequestRepositoryRules(
     allProjects,
     (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
-    (project) => feed.isConnected(project.environmentId),
+    (project) =>
+      feed.ruleCounts(project.environmentId) &&
+      targets.some((target) => target.environmentId === project.environmentId),
     feed.ruleFor,
   );
   const visibilities = entries.map((entry) =>

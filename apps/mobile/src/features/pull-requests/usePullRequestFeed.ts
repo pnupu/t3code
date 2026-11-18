@@ -64,6 +64,10 @@ export function usePullRequestFeed() {
         environment.environmentId === environmentId && environment.connectionState === "connected",
     );
 
+  /** A copy's rule counts toward a row only where this device could also change it. */
+  const ruleCounts = (environmentId: EnvironmentId) =>
+    isConnected(environmentId) && canHide(environmentId);
+
   /** The one rule for which projects hide their repository, the same as on web. */
   const hidesRepository = (project: {
     readonly environmentId: EnvironmentId;
@@ -155,7 +159,7 @@ export function usePullRequestFeed() {
     hidden,
     hiddenUrls,
     ruleFor,
-    isConnected,
+    ruleCounts,
     hidesRepository,
     canHide,
     canUnhide,
