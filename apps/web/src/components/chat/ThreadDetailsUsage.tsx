@@ -24,7 +24,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { formatContextWindowCompactionMessage } from "./compaction.logic";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 
-const PACE_LABEL: Record<LimitPace, string> = {
+export const PACE_LABEL: Record<LimitPace, string> = {
   ahead: "Ahead of pace",
   on: "On pace",
   under: "Under pace",
