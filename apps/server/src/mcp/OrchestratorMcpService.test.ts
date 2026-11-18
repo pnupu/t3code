@@ -3278,6 +3278,145 @@ describe("OrchestratorMcpService provider resolution", () => {
     }),
   );
 
+  const otherProjectId = ProjectId.make("project:mcp-providers-other");
+  it.effect.each([
+    {
+      isolation: "worktree" as const,
+      outcome: "running",
+      dispatched: [
+        {
+          projectId: otherProjectId,
+          workspaceStrategy: {
+            type: "worktree",
+            baseRef: "head-of:/repo/other",
+            startFromOrigin: false,
+          },
+        },
+      ],
+    },
+    { isolation: "shared" as const, outcome: "invalid_request", dispatched: [] },
+  ])(
+    "a task in another project here with $isolation isolation",
+    ({ isolation, outcome, dispatched: expected }) =>
+      Effect.gen(function* () {
+        const dispatched = yield* Ref.make<ReadonlyArray<unknown>>([]);
+        const task = {
+          id: taskId,
+          threadId: parentThreadId,
+          runId: parentRunId,
+          parentNodeId,
+          origin: "app_owned",
+          createdBy: "agent",
+          driver: ProviderDriverKind.make("codex"),
+          providerInstanceId: codexInstanceId,
+          providerThreadId: null,
+          childThreadId,
+          nativeTaskRef: null,
+          prompt: "Fix the other repository.",
+          title: null,
+          model: "gpt-5.4",
+          status: "running",
+          result: null,
+          startedAt: null,
+          completedAt: null,
+        };
+        let delegated = false;
+        const layerDependencies = Layer.mergeAll(
+          NodeServices.layer,
+          NodeCrypto.layer,
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            hasReceipt: () => Effect.succeed(false),
+            getThreadRecords: (threadId) =>
+              Effect.succeed(
+                threadId === parentThreadId
+                  ? parentProjection(delegated ? [task] : [])
+                  : childProjection,
+              ),
+            dispatch: (command) =>
+              Ref.update(dispatched, (commands) => [...commands, command]).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    delegated = true;
+                  }),
+                ),
+                Effect.as({
+                  sequence: 1,
+                  storedEvents: [
+                    {
+                      sequence: 1,
+                      commandId: null,
+                      event: { type: "subagent.updated", payload: task },
+                    },
+                  ],
+                } as never),
+              ),
+          }),
+          providerRegistryLayer([
+            providerSnapshot({
+              instanceId: codexInstanceId,
+              driver: ProviderDriverKind.make("codex"),
+              model: "gpt-5.4",
+            }),
+          ]),
+          adapterRegistryLayer([codexInstanceId]),
+          Layer.mock(ProjectService.ProjectService)({
+            getById: (id) =>
+              Effect.succeedSome({
+                id,
+                title: id,
+                workspaceRoot: id === otherProjectId ? "/repo/other" : "/repo/parent",
+              } as never),
+          }),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(RemoteDelegation.RemoteDelegation)({}),
+          Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+          ServerSettings.layerTest(),
+        );
+
+        yield* Effect.gen(function* () {
+          const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+          const result = yield* service
+            .delegateTask(scope, {
+              task: "Fix the other repository.",
+              target: { projectId: otherProjectId },
+              isolation,
+              mode: "async",
+              clientRequestId: `delegate-other-project-${isolation}`,
+            })
+            .pipe(
+              Effect.map((task): string => task.status),
+              Effect.catch((error) => Effect.succeed(error.code)),
+            );
+          assert.equal(result, outcome);
+          const commands = (yield* Ref.get(dispatched)) as ReadonlyArray<{
+            readonly projectId?: ProjectId;
+            readonly workspaceStrategy?: unknown;
+          }>;
+          assert.deepEqual(
+            commands.map(({ projectId, workspaceStrategy }) => ({ projectId, workspaceStrategy })),
+            expected,
+          );
+        }).pipe(
+          Effect.provide(
+            OrchestratorMcpService.layer.pipe(
+              Layer.provide(
+                Layer.mock(ThreadLaunchService.ThreadLaunchService)({
+                  isNonGitProject: () => Effect.succeed(false),
+                }),
+              ),
+              Layer.provide(
+                Layer.mock(GitVcsDriver.GitVcsDriver)({
+                  resolveCommit: ({ cwd }) =>
+                    Effect.succeed({ commitSha: `head-of:${cwd}` } as never),
+                }),
+              ),
+              Layer.provide(layerDependencies),
+            ),
+          ),
+        );
+      }),
+  );
+
   it.effect.each(["async", "wait"] as const)(
     "prepares a delegated child whose %s caller goes away after its run commits",
     (mode) =>
