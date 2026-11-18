@@ -407,6 +407,7 @@ export function applyServerSettingsPatch(
     sourceControlHosts: sourceControlHostsPatch,
     usagePriceOverrides: usagePriceOverridesPatch,
     usageModelAliases: usageModelAliasesPatch,
+    hiddenPullRequests: hiddenPullRequestsPatch,
     // Entry replacement: deepMerge would keep keys the client meant to clear.
     projectSettingsOverrides: projectSettingsOverridesPatch,
     projectAgentBrowserAccessOverrides: _legacyBrowserAccess,
@@ -639,6 +640,20 @@ export function applyServerSettingsPatch(
           usageModelAliases: mergeSettingsEntries(
             current.usageModelAliases,
             usageModelAliasesPatch,
+          ),
+        }
+      : {}),
+    // lean: the record holds only hidden links, unbounded until users hide thousands of them.
+    ...(hiddenPullRequestsPatch !== undefined
+      ? {
+          hiddenPullRequests: mergeSettingsEntries(
+            current.hiddenPullRequests,
+            Object.fromEntries(
+              Object.entries(hiddenPullRequestsPatch).map(([url, hidden]) => [
+                url.toLowerCase(),
+                hidden,
+              ]),
+            ),
           ),
         }
       : {}),

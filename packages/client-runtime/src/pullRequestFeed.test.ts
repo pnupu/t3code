@@ -3,15 +3,14 @@ import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t
 
 import {
   filterPullRequestFeed,
-  hiddenPullRequestList,
+  hiddenPullRequestUrls,
+  isPullRequestHidden,
   pullRequestFeedVisibility,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
-  withHiddenPullRequest,
-  withoutHiddenPullRequest,
   type PullRequestFeedGroup,
 } from "./pullRequestFeed.ts";
 
@@ -105,13 +104,12 @@ describe("pull request feed rules", () => {
     ).toBe(shown ? "shown" : "rule");
   });
 
-  it.each<[string, PullRequestFeedRule, boolean, boolean, boolean]>([
-    ["a connected, writable holder hides", "hidden", true, true, true],
-    ["an offline holder does not", "hidden", false, true, false],
-    ["a read-only holder does not", "hidden", true, false, false],
-    ["another rule does not", "authored", true, true, false],
-  ])("%s its repository", (_, rule, connected, writable, hides) => {
-    expect(pullRequestProjectHidesRepository(rule, { connected, writable })).toBe(hides);
+  it.each<[string, PullRequestFeedRule, boolean, boolean]>([
+    ["a connected holder hides", "hidden", true, true],
+    ["an offline holder does not", "hidden", false, false],
+    ["another rule does not", "authored", true, false],
+  ])("%s its repository", (_, rule, connected, hides) => {
+    expect(pullRequestProjectHidesRepository(rule, { connected })).toBe(hides);
   });
 
   it("rules out every environment's copy of a repository one environment hides", () => {
@@ -150,19 +148,13 @@ describe("pull request feed rules", () => {
     ).toBe("shown");
   });
 
-  it("lists each hidden link once across environments, in its first spelling", () => {
-    expect(
-      hiddenPullRequestList([
-        { hiddenPullRequests: ["https://H/A/1"] },
-        null,
-        { hiddenPullRequests: ["https://h/a/1", "https://h/b/2"] },
-      ]),
-    ).toEqual(["https://H/A/1", "https://h/b/2"]);
-  });
-
-  it("hides and unhides by URL regardless of case", () => {
-    const hidden = withHiddenPullRequest(["https://h/a/1"], "https://H/A/1");
-    expect(hidden).toEqual(["https://H/A/1"]);
-    expect(withoutHiddenPullRequest(hidden, "https://h/a/1")).toEqual([]);
+  it("reads every environment's hidden links, regardless of case", () => {
+    const hidden = hiddenPullRequestUrls([
+      { hiddenPullRequests: { "https://h/a/1": true } },
+      null,
+      { hiddenPullRequests: { "https://h/b/2": true } },
+    ]);
+    expect([...hidden]).toEqual(["https://h/a/1", "https://h/b/2"]);
+    expect(isPullRequestHidden(hidden, "https://H/A/1")).toBe(true);
   });
 });
