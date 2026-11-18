@@ -13,7 +13,7 @@ import { readEnvironmentScope } from "../../state/session";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useSettingsWriter } from "../settings/useSettingsWriter";
-import { sentHiddenPullRequestApplies, type SentHiddenPullRequest } from "./sentHiddenPullRequests";
+import { settleSentHiddenPullRequest, type SentHiddenPullRequest } from "./sentHiddenPullRequests";
 
 /** Per-project feed rules and hidden pull requests, read from every environment's settings. */
 export function usePullRequestFeed() {
@@ -29,8 +29,17 @@ export function usePullRequestFeed() {
     hiddenPullRequestLinks([...configs.values()].map((config) => config.settings)),
   );
   const settingsOf = (id: EnvironmentId) => configs.get(id)?.settings;
+  // Answered targets leave state for good, so a later change cannot revive them.
+  let settled = sending;
   for (const [key, sent] of sending) {
-    if (!sentHiddenPullRequestApplies(sent, key, settingsOf)) continue;
+    const next = settleSentHiddenPullRequest(sent, key, settingsOf);
+    if (next === sent) continue;
+    if (settled === sending) settled = new Map(sending);
+    if (next === null) (settled as Map<string, typeof sent>).delete(key);
+    else (settled as Map<string, typeof sent>).set(key, next);
+  }
+  if (settled !== sending) setSending(settled);
+  for (const [key, sent] of settled) {
     if (sent.url === null) links.delete(key);
     else links.set(key, sent.url);
   }
@@ -68,19 +77,14 @@ export function usePullRequestFeed() {
 
   // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const send = (key: string, url: string | null, environmentIds: ReadonlyArray<EnvironmentId>) => {
-    const sent: SentHiddenPullRequest<EnvironmentId> = {
-      url,
-      targets: new Map(environmentIds.map((id) => [id, {}])),
-    };
-    setSending((current) => {
-      // Answered sends never apply again, so they leave here.
-      const next = new Map(
-        [...current].filter(([entryKey, entry]) =>
-          sentHiddenPullRequestApplies(entry, entryKey, settingsOf),
-        ),
-      );
-      return next.set(key, sent);
-    });
+    const token = {};
+    setSending((current) =>
+      new Map(current).set(key, {
+        token,
+        url,
+        targets: new Map(environmentIds.map((id) => [id, {}])),
+      }),
+    );
     void writeSettings(
       [],
       environmentIds.map((environmentId) => ({
@@ -92,15 +96,21 @@ export function usePullRequestFeed() {
       const latest = registry.get(environmentServerConfigsAtom);
       setSending((current) => {
         // Only this send's own entry: a later send for the same key replaced it.
-        if (current.get(key) !== sent) return current;
+        const entry = current.get(key);
+        if (entry?.token !== token) return current;
         const next = new Map(current);
-        const targets = new Map(
-          environmentIds
-            .filter((id) => !failed.includes(id))
-            .map((id) => [id, { repliedOver: latest.get(id)?.settings }] as const),
-        );
-        if (targets.size === 0) next.delete(key);
-        else next.set(key, { url, targets });
+        // A failed holder still hides the link, so the whole send ends.
+        if (failed.length > 0) next.delete(key);
+        else
+          next.set(key, {
+            ...entry,
+            targets: new Map(
+              [...entry.targets.keys()].map((id) => [
+                id,
+                { repliedOver: latest.get(id)?.settings },
+              ]),
+            ),
+          });
         return next;
       });
     });

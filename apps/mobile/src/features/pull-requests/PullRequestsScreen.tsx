@@ -206,20 +206,21 @@ export function PullRequestsScreen(
       },
     );
   // Each copy meets its own environment's rule before copies merge, so a pull request shows when
-  // any copy passes. A string key keeps the merged list memoized while the rules hold still.
+  // any copy passes. The React Compiler memoizes the merge on this string while the rules hold.
+  const visibilityByEntry = new Map(result.entries.map((entry) => [entry, visibilityOf(entry)]));
   const ruledOut = result.entries
-    .flatMap((entry) => (visibilityOf(entry) === "rule" ? [pullRequestKey(entry)] : []))
+    .flatMap((entry) => (visibilityByEntry.get(entry) === "rule" ? [pullRequestKey(entry)] : []))
     .join("\n");
   const ruledOutKeys = new Set(ruledOut.split("\n"));
   const entries = filterPullRequestList(
     result.entries.filter((entry) => !ruledOutKeys.has(pullRequestKey(entry))),
     controls,
-    result.data?.viewers ?? {},
+    viewers,
     query,
     result.data.localSearchHosts,
     new Set(connectedKey.split("\n")),
   );
-  const visibilities = entries.map(visibilityOf);
+  const visibilities = entries.map((entry) => visibilityByEntry.get(entry) ?? visibilityOf(entry));
   const hiddenCount = visibilities.filter((visibility) => visibility === "hidden").length;
   // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
   if (showHidden && feed.hidden.size === 0) setShowHidden(false);
