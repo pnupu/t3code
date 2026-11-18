@@ -89,7 +89,12 @@ export function ThreadDetailsUsageRings() {
                     strokeWidth={STROKE}
                     strokeLinecap="round"
                     strokeDasharray={circumference}
-                    strokeDashoffset={circumference * (1 - left / 100)}
+                    // Round caps add half a stroke at each end; trim the dash so the drawn arc matches the percent.
+                    strokeDashoffset={
+                      left >= 100
+                        ? 0
+                        : circumference - Math.max(0, (circumference * left) / 100 - STROKE)
+                    }
                     className="opacity-35 transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
                   />
                 ) : null}
@@ -100,7 +105,11 @@ export function ThreadDetailsUsageRings() {
         <div className="flex min-w-0 flex-1 flex-col text-xs">
           {rings.map((ring) => {
             const { left } = ring;
-            const reset = ring.window.resets.find((entry) => entry.at > now);
+            const pooled = ring.window.members.length > 1;
+            // A spent pool member's reset can restore nothing; name the next one that does.
+            const reset = ring.window.resets.find(
+              (entry) => entry.at > now && (!pooled || entry.restoresPercent > 0),
+            );
             return (
               <Tooltip key={ring.key}>
                 <TooltipTrigger
@@ -138,9 +147,7 @@ export function ThreadDetailsUsageRings() {
                     </span>
                     {reset ? (
                       <span className="text-muted-foreground">
-                        {ring.window.members.length > 1
-                          ? `+${reset.restoresPercent}% in `
-                          : "Resets in "}
+                        {pooled ? `+${reset.restoresPercent}% in ` : "Resets in "}
                         {formatDuration(reset.at - now)} ·{" "}
                         {formatUpcomingTimestamp(
                           new Date(reset.at).toISOString(),
