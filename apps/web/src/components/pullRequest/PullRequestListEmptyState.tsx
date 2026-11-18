@@ -135,7 +135,7 @@ export function PullRequestListEmptyState({
         <EmptyTitle>{filtered ? "Nothing under these filters" : "No pull requests"}</EmptyTitle>
         <EmptyDescription>
           {filtered
-            ? "Widen the state, involvement or project filter to see more."
+            ? "Widen the state, involvement or project filter, or the projects' pull request feed rules, to see more."
             : "Pull requests from every project in this workspace appear here."}
         </EmptyDescription>
       </EmptyHeader>

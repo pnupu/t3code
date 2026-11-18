@@ -602,8 +602,9 @@ export function PullRequestsPage() {
     (sentQuery.length === 0 ? baselineQuery.data : undefined) ??
     (loaded?.scope === scopeKey ? loaded.data : null) ??
     narrowed;
-  // With every project left out, nothing answers, so earlier rows must not stay on screen.
-  const listData = environmentQueries.length === 0 ? null : (answered ?? carried);
+  // When feed rules leave every project out, nothing answers, so earlier rows must not stay.
+  const everyProjectLeftOut = environmentQueries.length === 0 && queryEnvironmentIds.length > 0;
+  const listData = everyProjectLeftOut ? null : (answered ?? carried);
   const showingCarried = answered === null && listData !== null;
   const loadingMore = listQuery.isPending && listData !== null;
   const firstLoad = listQuery.isPending && listData === null;
