@@ -30,7 +30,7 @@ export function usePullRequestFeed() {
   );
   const settingsOf = (id: EnvironmentId) => configs.get(id)?.settings;
   for (const [key, sent] of sending) {
-    if (!sentHiddenPullRequestApplies(sent, settingsOf)) continue;
+    if (!sentHiddenPullRequestApplies(sent, key, settingsOf)) continue;
     if (sent.url === null) links.delete(key);
     else links.set(key, sent.url);
   }
@@ -68,11 +68,16 @@ export function usePullRequestFeed() {
 
   // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const send = (key: string, url: string | null, environmentIds: ReadonlyArray<EnvironmentId>) => {
-    const sent: SentHiddenPullRequest<EnvironmentId> = { url };
+    const sent: SentHiddenPullRequest<EnvironmentId> = {
+      url,
+      targets: new Map(environmentIds.map((id) => [id, {}])),
+    };
     setSending((current) => {
       // Answered sends never apply again, so they leave here.
       const next = new Map(
-        [...current].filter(([, entry]) => sentHiddenPullRequestApplies(entry, settingsOf)),
+        [...current].filter(([entryKey, entry]) =>
+          sentHiddenPullRequestApplies(entry, entryKey, settingsOf),
+        ),
       );
       return next.set(key, sent);
     });
@@ -83,18 +88,19 @@ export function usePullRequestFeed() {
         patch: { hiddenPullRequests: { [key]: url } },
       })),
     ).then((failed) => {
-      // Read now: the push may have arrived before this reply.
+      // Read now: a push that arrived before this reply already answers its target.
       const latest = registry.get(environmentServerConfigsAtom);
       setSending((current) => {
         // Only this send's own entry: a later send for the same key replaced it.
         if (current.get(key) !== sent) return current;
         const next = new Map(current);
-        if (failed.length > 0) next.delete(key);
-        else
-          next.set(key, {
-            url,
-            settledOver: new Map(environmentIds.map((id) => [id, latest.get(id)?.settings])),
-          });
+        const targets = new Map(
+          environmentIds
+            .filter((id) => !failed.includes(id))
+            .map((id) => [id, { repliedOver: latest.get(id)?.settings }] as const),
+        );
+        if (targets.size === 0) next.delete(key);
+        else next.set(key, { url, targets });
         return next;
       });
     });
