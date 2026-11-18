@@ -293,13 +293,13 @@ export function PullRequestsScreen(
       onSelect={selectPullRequest}
       getActions={(entry) => [
         ...actions(entry),
-        ...(feed.canHide(entry.environmentId)
-          ? [
-              isPullRequestHidden(feed.hidden, entry.url)
-                ? { id: "unhide", title: "Show in feed", image: "eye" }
-                : { id: "hide", title: "Hide from feed", image: "eye.slash" },
-            ]
-          : []),
+        ...(isPullRequestHidden(feed.hidden, entry.url)
+          ? feed.canUnhide(entry.url)
+            ? [{ id: "unhide", title: "Show in feed", image: "eye" }]
+            : []
+          : feed.canHide(entry.environmentId)
+            ? [{ id: "hide", title: "Hide from feed", image: "eye.slash" }]
+            : []),
       ]}
       onAction={(entry, action) => {
         if (action === "hide") feed.hide(entry);

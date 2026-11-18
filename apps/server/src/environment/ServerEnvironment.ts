@@ -249,6 +249,7 @@ export const make = Effect.gen(function* () {
       threadAutoSettlementScope: true,
       threadRestartContinuation: true,
       projectSettingsOverrides: true,
+      pullRequestFeed: true,
       projectProviderInstanceOverrides: true,
       threadSnooze: true,
       threadForceStop: true,

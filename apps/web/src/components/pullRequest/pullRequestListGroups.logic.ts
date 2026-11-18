@@ -119,9 +119,9 @@ export function pullRequestGroups({
 
   // lean: projects ruled "authored" or "reviewing" are still read by the main list, and their
   // other rows drop here, which can leave a short page. Revisit if users report sparse pages.
-  const { groups, hiddenCount } =
+  const { groups, hiddenCount, ruledOutCount } =
     feed === undefined
-      ? { groups: grouped, hiddenCount: 0 }
+      ? { groups: grouped, hiddenCount: 0, ruledOutCount: 0 }
       : filterPullRequestFeed(grouped, { ...feed, involvement });
   const entries =
     groups === grouped
@@ -156,6 +156,7 @@ export function pullRequestGroups({
     listedPullRequestTabStatuses,
     groups,
     hiddenCount,
+    ruledOutCount,
     entriesByStatsKey,
     heldPullRequestsBySurface,
   };

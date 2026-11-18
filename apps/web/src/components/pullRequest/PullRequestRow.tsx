@@ -124,6 +124,13 @@ function PullRequestRowImpl({
       onContextMenu={
         onRowMenu
           ? (event) => {
+              // Links and selected text keep the browser's own menu.
+              if (
+                (event.target instanceof Element && event.target.closest("a")) ||
+                window.getSelection()?.isCollapsed === false
+              ) {
+                return;
+              }
               event.preventDefault();
               onRowMenu(entry, openLabel, { x: event.clientX, y: event.clientY });
             }

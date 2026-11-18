@@ -775,6 +775,7 @@ export function PullRequestsPage() {
     listedPullRequestTabStatuses,
     groups,
     hiddenCount,
+    ruledOutCount,
     entriesByStatsKey,
     heldPullRequestsBySurface,
   } = pullRequestGroups({
@@ -1294,7 +1295,9 @@ export function PullRequestsPage() {
             search.state !== "open" ||
             search.involvement !== "all" ||
             scopedProjectId !== undefined ||
-            search.host !== undefined
+            search.host !== undefined ||
+            hiddenCount > 0 ||
+            ruledOutCount > 0
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
