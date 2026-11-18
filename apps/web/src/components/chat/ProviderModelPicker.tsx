@@ -124,7 +124,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   triggerShortcuts?: string;
   /**
    * Docks an effort column beside the list and a footer under both. The popup then stays open
-   * until Escape or an outside press, and picking a model moves focus to its levels.
+   * until Escape, an outside press or Enter on a level, and picking a model moves focus to its
+   * levels.
    */
   effortColumn?: ReactNode;
   footer?: ReactNode;
@@ -480,8 +481,21 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   data-model-picker-effort
                   className="flex min-h-0 w-48 flex-col sm:shrink-0 border-l border-border/70 bg-muted/40 max-sm:h-64 max-sm:w-full max-sm:border-t max-sm:border-l-0"
                   onKeyDown={(event) => {
-                    if (event.key !== "ArrowLeft" || event.altKey || event.ctrlKey || event.metaKey)
+                    if (event.altKey || event.ctrlKey || event.metaKey) return;
+                    const target = event.target;
+                    if (
+                      event.key === "Enter" &&
+                      target instanceof HTMLElement &&
+                      target.matches("[data-effort-level]")
+                    ) {
+                      // Enter confirms the level: it picks it and closes the picker.
+                      event.preventDefault();
+                      event.stopPropagation();
+                      target.click();
+                      setIsMenuOpen(false);
                       return;
+                    }
+                    if (event.key !== "ArrowLeft") return;
                     event.preventDefault();
                     event.stopPropagation();
                     searchInputRef.current?.focus();
