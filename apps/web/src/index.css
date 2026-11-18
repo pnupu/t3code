@@ -730,11 +730,21 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     --stage-night-glow-highlight: oklch(0.553749 0.176543 271.958);
     --stage-night-glow-secondary: oklch(0.345571 0.117466 273.568);
     --stage-night-sparkle: oklch(0.880867 0.057747 269.011);
+    /* Fork artwork keeps one palette in every theme, so a fork server always reads the same. */
+    --stage-fork-top: oklch(0.8 0.125 72);
+    --stage-fork-mid: oklch(0.64 0.16 48);
+    --stage-fork-bottom: oklch(0.42 0.12 32);
+    --stage-fork-highlight: oklch(0.965 0.03 85);
+    --stage-fork-secondary: oklch(0.83 0.12 68);
+    --stage-fork-line: oklch(0.975 0.02 80);
 
     @variant dark {
       --stage-art-top: oklch(0.581473 0.149124 256.9);
       --stage-art-mid: oklch(0.456509 0.159377 261.945);
       --stage-art-bottom: oklch(0.291327 0.136578 267.649);
+      --stage-fork-top: oklch(0.6 0.125 58);
+      --stage-fork-mid: oklch(0.44 0.105 40);
+      --stage-fork-bottom: oklch(0.27 0.06 30);
     }
   }
 

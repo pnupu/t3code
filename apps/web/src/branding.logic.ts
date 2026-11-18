@@ -1,4 +1,6 @@
 const NIGHTLY_SERVER_VERSION_PATTERN = /^[^-+]+-(?:nightly|preview)\.\d{8}\.\d+$/;
+// Fork releases are numbered X.Y.(Z*1000+n) (FORK.md), so a plain patch of 1000 or more is a fork build.
+const FORK_SERVER_VERSION_PATTERN = /^\d+\.\d+\.[1-9]\d{3,}$/;
 
 export function formatAppDisplayName(input: {
   readonly baseName: string;
@@ -32,6 +34,9 @@ export function resolveServerBackedAppStageLabel(input: {
   readonly primaryServerVersion: string | null | undefined;
   readonly fallbackStageLabel: string;
 }): string {
+  if (input.primaryServerVersion && FORK_SERVER_VERSION_PATTERN.test(input.primaryServerVersion)) {
+    return "Fork";
+  }
   return input.primaryServerVersion &&
     NIGHTLY_SERVER_VERSION_PATTERN.test(input.primaryServerVersion)
     ? // oxlint-disable-next-line t3code/no-untranslated-copy -- release channel name, part of the product name
