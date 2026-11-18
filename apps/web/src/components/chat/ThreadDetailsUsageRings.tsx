@@ -14,16 +14,11 @@ import { environmentPresentations } from "../../state/presentation";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { providerClients } from "../settings/providerDriverMeta";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { barColor } from "../usage/UsageLimits";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { PACE_LABEL } from "./ThreadDetailsUsage";
 
-// Deeper in light mode so each ring holds contrast on a white card.
-const RING_COLORS = [
-  "text-[#2563eb] dark:text-[#60a5fa]",
-  "text-[#ea580c] dark:text-[#fb923c]",
-  "text-[#7c3aed] dark:text-[#a78bfa]",
-  "text-[#0d9488] dark:text-[#2dd4bf]",
-] as const;
+const MAX_RINGS = 4;
 
 const SIZE = 76;
 const STROKE = 7;
@@ -39,6 +34,7 @@ export function ThreadDetailsUsageRings() {
   const rings = collectLimitPools(collectLimitAccounts(presentations), now)
     .flatMap((pool) => {
       const provider = providerClients.get(pool.driver)?.label ?? String(pool.driver);
+      const color = barColor(pool.driver);
       return displayLimitWindows(pool)
         .filter((window) => window.kind === "weekly")
         .map((window) => ({
@@ -46,12 +42,13 @@ export function ThreadDetailsUsageRings() {
           // "Weekly · Fable" and "Go · Weekly" keep their qualifier; plain "Weekly" names the provider.
           name: window.label.replace(/^Weekly\s*·\s*|\s*·\s*Weekly$|^Weekly$/i, "") || provider,
           title: `${provider} ${window.label}`,
+          color,
           left: Math.max(0, Math.min(100, window.remainingPercent)),
           window,
         }));
     })
     // lean: more than four rings leave no room in the center; revisit if a fifth weekly pool matters.
-    .slice(0, RING_COLORS.length);
+    .slice(0, MAX_RINGS);
   if (rings.length === 0) return null;
 
   return (
@@ -73,7 +70,7 @@ export function ThreadDetailsUsageRings() {
             const circumference = 2 * Math.PI * radius;
             const { left } = ring;
             return (
-              <g key={ring.key} className={RING_COLORS[index]}>
+              <g key={ring.key} style={{ color: ring.color }}>
                 <circle
                   cx={SIZE / 2}
                   cy={SIZE / 2}
@@ -81,7 +78,7 @@ export function ThreadDetailsUsageRings() {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={STROKE}
-                  className="opacity-20 dark:opacity-25"
+                  className="opacity-10"
                 />
                 {left > 0 ? (
                   <circle
@@ -94,7 +91,7 @@ export function ThreadDetailsUsageRings() {
                     strokeLinecap="round"
                     strokeDasharray={circumference}
                     strokeDashoffset={circumference * (1 - left / 100)}
-                    className="transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
+                    className="opacity-35 transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
                   />
                 ) : null}
               </g>
@@ -102,7 +99,7 @@ export function ThreadDetailsUsageRings() {
           })}
         </svg>
         <div className="flex min-w-0 flex-1 flex-col text-xs">
-          {rings.map((ring, index) => {
+          {rings.map((ring) => {
             const { left } = ring;
             const reset = ring.window.resets.find((entry) => entry.at > now);
             return (
@@ -118,7 +115,8 @@ export function ThreadDetailsUsageRings() {
                 >
                   <span
                     aria-hidden
-                    className={cn("size-2 shrink-0 rounded-full bg-current", RING_COLORS[index])}
+                    className="size-2 shrink-0 rounded-full bg-current opacity-35"
+                    style={{ color: ring.color }}
                   />
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">{ring.name}</span>
                   <span
