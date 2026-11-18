@@ -119,6 +119,17 @@ export interface PullRequestFeedOptions<Entry> {
 }
 
 /**
+ * Whether a project's `hidden` rule removes its repository from every environment's list. Only an
+ * environment this client reaches and can write counts, so the user can always undo the rule.
+ */
+export function pullRequestProjectHidesRepository(
+  rule: PullRequestFeedRule,
+  environment: { readonly connected: boolean; readonly writable: boolean },
+): boolean {
+  return rule === "hidden" && environment.connected && environment.writable;
+}
+
+/**
  * Whether a row's repository is one some environment's project hides, matched on the projects'
  * repository keys like the web query assignment, so every environment's copy leaves the feed.
  */

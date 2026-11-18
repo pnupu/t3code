@@ -208,6 +208,7 @@ export function PullRequestsPage() {
   const [hostReads, setHostReads] = useState<ReadonlyMap<EnvironmentId, PullRequestHostRead>>(
     () => new Map(),
   );
+  const feed = usePullRequestFeed();
   const {
     capableEnvironments,
     scopedEnvironmentId,
@@ -227,7 +228,7 @@ export function PullRequestsPage() {
     linkedSelection,
     expectedHosts,
     projectsKnown,
-  } = usePullRequestScope(search, hostReads);
+  } = usePullRequestScope(search, hostReads, feed.hidesRepository);
   const rightPanelRef = capableEnvironments.length === 0 ? null : PULL_REQUESTS_PANEL_REF;
   const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(rightPanelRef);
   const rightPanelState = useRightPanelStore((state) =>
@@ -770,7 +771,6 @@ export function PullRequestsPage() {
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const {
     listedPullRequestTabStatuses,
@@ -1300,11 +1300,7 @@ export function PullRequestsPage() {
             search.host !== undefined ||
             hiddenCount > 0 ||
             ruledOutCount > 0 ||
-            projects.some(
-              (project) =>
-                feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
-                "hidden",
-            )
+            projects.some(feed.hidesRepository)
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
