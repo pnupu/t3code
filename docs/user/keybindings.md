@@ -23,7 +23,7 @@ To free a default shortcut, choose **Unassign** from its row menu (**Reset to de
 
 Configure whether `Enter` sends or requires `mod+Enter` in **Settings → Chat → Send shortcut** (`Shift+Enter` always inserts a newline).
 
-In the model picker, use `Left`/`Shift+Tab` to move to the provider list, `Right` to return to search or move into effort levels, and `Up`/`Down`/`Enter` to select.
+In the model picker, use `Left`/`Shift+Tab` to move to the provider list, `Right` to return to search or move into effort levels, and `Up`/`Down`/`Enter` to select. Enter on an effort level chooses it, closes the picker, and returns to the message input.
 
 ## Copy pull request and thread references
 
