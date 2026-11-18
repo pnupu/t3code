@@ -229,17 +229,16 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         const fs = yield* FileSystem.FileSystem;
         const a = "https://github.com/x/a/pull/1";
         const b = "https://github.com/x/b/pull/2";
-        yield* service.updateSettings({ hiddenPullRequests: { [a]: true } });
-        const both = yield* service.updateSettings({
-          hiddenPullRequests: { "HTTPS://GITHUB.COM/X/B/PULL/2": true },
-        });
-        assert.deepEqual(both.hiddenPullRequests, { [a]: true, [b]: true });
+        yield* service.updateSettings({ hiddenPullRequests: { [a]: a } });
+        const upper = b.toUpperCase();
+        const both = yield* service.updateSettings({ hiddenPullRequests: { [upper]: upper } });
+        assert.deepEqual(both.hiddenPullRequests, { [a]: a, [b]: upper });
         const unhidden = yield* service.updateSettings({ hiddenPullRequests: { [a]: null } });
-        assert.deepEqual(unhidden.hiddenPullRequests, { [b]: true });
+        assert.deepEqual(unhidden.hiddenPullRequests, { [b]: upper });
         assert.deepEqual(
           (yield* decodeServerSettingsJson(yield* fs.readFileString(config.settingsPath)))
             .hiddenPullRequests,
-          { [b]: true },
+          { [b]: upper },
         );
       }),
     ).pipe(Effect.provide(layerServerSettings())),

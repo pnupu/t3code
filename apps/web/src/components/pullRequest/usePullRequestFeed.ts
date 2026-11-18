@@ -1,5 +1,6 @@
 import {
   hiddenPullRequestKey,
+  hiddenPullRequestLinks,
   hiddenPullRequestUrls,
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
@@ -52,7 +53,7 @@ export function usePullRequestFeed() {
       ?.settings;
   const allSettings = environments.map((environment) => environment.serverConfig?.settings);
   const hidden = hiddenPullRequestUrls(allSettings);
-  const hiddenUrls = [...hidden];
+  const hiddenUrls = [...hiddenPullRequestLinks(allSettings).values()];
 
   const ruleFor = (entry: { environmentId: EnvironmentId; projectId: ProjectId }) =>
     pullRequestFeedRule(settingsOf(entry.environmentId), entry.projectId);
@@ -88,7 +89,7 @@ export function usePullRequestFeed() {
       environments.filter((environment) => environment.environmentId === entry.environmentId),
       (current) =>
         planEnvironmentSettingsPatch(current, {
-          hiddenPullRequests: { [hiddenPullRequestKey(entry.url)]: true },
+          hiddenPullRequests: { [hiddenPullRequestKey(entry.url)]: entry.url },
         }),
     );
 
