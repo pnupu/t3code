@@ -40,6 +40,7 @@ import {
   pullRequestProjectQueries,
   type PullRequestHostAvailability,
 } from "./pullRequestProjectAssignment.logic";
+import { pullRequestFeedRule } from "@t3tools/client-runtime/pull-request-feed";
 import { pullRequestFilterProjects } from "@t3tools/client-runtime/pull-request-project-filter";
 import { pullRequestListEntryId } from "./pullRequestListGroups.logic";
 
@@ -141,7 +142,19 @@ export function usePullRequestScope(
   }> => {
     const plain = queryEnvironmentIds.map((environmentId) => ({ environmentId }));
     if (!projectsKnown || scopedProjectId !== undefined) return plain;
-    return pullRequestProjectQueries(projects, queryEnvironmentIds, availability, unreachable);
+    return pullRequestProjectQueries(
+      projects,
+      queryEnvironmentIds,
+      availability,
+      unreachable,
+      (project) =>
+        pullRequestFeedRule(
+          capableEnvironments.find(
+            (environment) => environment.environmentId === project.environmentId,
+          )?.serverConfig?.settings,
+          project.id,
+        ) === "hidden",
+    );
   };
   const environmentQueries = queriesFor(hostAvailability);
   // What the page reads once a refresh forgets host reads; refresh must refetch these too.

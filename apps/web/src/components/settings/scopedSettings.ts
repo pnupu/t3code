@@ -246,7 +246,7 @@ interface ScopedServerWrite {
 }
 
 function projectOverrideWrites(
-  scope: Extract<ResolvedSettingsScope, { kind: "project" | "checkout" }>,
+  members: readonly { readonly id: ProjectId; readonly environmentId: EnvironmentId }[],
   environments: readonly ScopedSettingsEnvironment[],
   update: (
     current: ProjectSettingsOverrides,
@@ -256,7 +256,7 @@ function projectOverrideWrites(
 ): ScopedServerWrite[] {
   const byId = new Map(environments.map((environment) => [environment.environmentId, environment]));
   const writes = new Map<EnvironmentId, ScopedServerWrite>();
-  for (const member of scope.members) {
+  for (const member of members) {
     const environment = byId.get(member.environmentId);
     if (!environment?.serverConfig || environment.connection.phase !== "connected") {
       continue;
@@ -318,7 +318,7 @@ export function planScopedSettingsPatch(
       : isProjectScope
         ? unscopableKeys.length > 0
           ? []
-          : projectOverrideWrites(scope, environments, (current, settings, projectId) => {
+          : projectOverrideWrites(scope.members, environments, (current, settings, projectId) => {
               // Override entries store whole objects; complete partial patches from each target's effective
               // value.
               const effective = resolveProjectSettings(settings, projectId).settings;
@@ -425,7 +425,7 @@ export function planScopedSettingsClear(
 ) {
   const serverWrites =
     scope.kind === "project" || scope.kind === "checkout"
-      ? projectOverrideWrites(scope, environments, (_current, settings, projectId) =>
+      ? projectOverrideWrites(scope.members, environments, (_current, settings, projectId) =>
           clearProjectSettingsOverrides(settings, projectId, keys),
         )
       : [];
@@ -531,6 +531,46 @@ function droppedSettingKeys(write: ScopedServerWrite, saved: ServerSettings | un
 }
 
 type ScopedSettingsPlan = ReturnType<typeof planScopedSettingsPatch>;
+
+const unavailablePlan = (
+  serverWrites: ScopedServerWrite[],
+  unavailableReason: string,
+): ScopedSettingsPlan => ({
+  clientPatch: {},
+  hasClientWrite: false,
+  serverWrites,
+  unavailableReason: serverWrites.length > 0 ? null : unavailableReason,
+});
+
+/** One project's override, written from outside Settings, such as a list row. */
+export function planProjectOverridePatch(
+  environments: readonly ScopedSettingsEnvironment[],
+  project: { readonly id: ProjectId; readonly environmentId: EnvironmentId },
+  patch: ProjectSettingsOverrides,
+): ScopedSettingsPlan {
+  return unavailablePlan(
+    projectOverrideWrites([project], environments, (current) => ({ ...current, ...patch })),
+    "Connect this project's environment to save its setting.",
+  );
+}
+
+/** Environment-wide writes computed from each environment's newest settings. */
+export function planEnvironmentSettingsPatch(
+  environments: readonly ScopedSettingsEnvironment[],
+  update: (settings: ServerSettings) => ServerSettingsPatch | null,
+): ScopedSettingsPlan {
+  return unavailablePlan(
+    environments.flatMap((environment) => {
+      const previous = environment.serverConfig?.settings;
+      if (!previous || environment.connection.phase !== "connected") return [];
+      const patch = update(previous);
+      return patch === null
+        ? []
+        : [{ environmentId: environment.environmentId, label: environment.label, previous, patch }];
+    }),
+    "Connect the environment to save this setting.",
+  );
+}
 
 type ScopedSettingsPersistServer = (input: {
   environmentId: EnvironmentId;

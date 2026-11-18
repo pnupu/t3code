@@ -64,6 +64,17 @@ export const PullRequestMergeMethod = Schema.Literals([
 ]);
 export type PullRequestMergeMethod = typeof PullRequestMergeMethod.Type;
 
+/** Which of a project's pull requests the combined Pull Requests feed shows. */
+export const PullRequestFeedRule = Schema.Literals(["all", "reviewing", "authored", "hidden"]);
+export type PullRequestFeedRule = typeof PullRequestFeedRule.Type;
+
+export const HIDDEN_PULL_REQUESTS_LIMIT = 500;
+/** Pull request URLs the user hid from the feed, compared case-insensitively. */
+export const HiddenPullRequests = Schema.Array(
+  Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048)),
+).check(Schema.isMaxLength(HIDDEN_PULL_REQUESTS_LIMIT));
+export type HiddenPullRequests = typeof HiddenPullRequests.Type;
+
 export const PullRequestAction = Schema.Literals([
   "merge",
   "ready",
