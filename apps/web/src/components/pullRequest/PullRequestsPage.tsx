@@ -68,6 +68,7 @@ import { INVOLVEMENT_TABS, SORT_OPTIONS, STATE_TABS } from "./pullRequestListOpt
 import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
 import { usePullRequestFeed } from "./usePullRequestFeed";
+import { pullRequestRepositoryRules } from "@t3tools/client-runtime/pull-request-feed";
 import { pullRequestPanelReference } from "./usePullRequestDetail";
 import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
 import {
@@ -791,7 +792,13 @@ export function PullRequestsPage() {
     partitionsWanted,
     feed: {
       scopedToProject: scopedProjectId !== undefined,
-      rulesFor: feed.rulesFor,
+      // Only copies in the list's scope: a row shows when any of their rules allows it.
+      rulesFor: pullRequestRepositoryRules(
+        projects,
+        (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+        (project) => feed.ruleCounts(project.environmentId),
+        feed.ruleFor,
+      ),
       hidden: feed.hidden,
       repositoryHidden: feed.repositoryHidden,
       showHidden,
@@ -1329,7 +1336,9 @@ export function PullRequestsPage() {
         </div>
       ) : null}
       {/* The error view replaces an emptied page, so it keeps this footer's way to more pages. */}
-      {listData?.truncated && (shownCount > 0 || listError !== null) ? (
+      {pullRequestsSupported &&
+      listData?.truncated &&
+      (shownCount > 0 || (listError !== null && (canContinue || pageSize < MAX_PAGE_SIZE))) ? (
         <div className="flex justify-center py-3 text-xs text-muted-foreground">
           {loadingMore ? (
             <span className="flex items-center gap-2">

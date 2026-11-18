@@ -172,6 +172,17 @@ describe("pull request feed rules", () => {
         hidden: new Set(),
       }),
     ).toBe("shown");
+    // A copy that does not count, such as an offline one, adds no rule; a keyless row keeps its own.
+    const counted = pullRequestRepositoryRules(
+      [project("env-1", "a1"), project("env-2", "a2")],
+      (candidate) => (candidate.environmentId === "env-1" ? "authored" : "all"),
+      (candidate) => candidate.environmentId === "env-1",
+      () => "authored",
+    );
+    expect(counted(row)).toEqual(["authored", "authored"]);
+    expect(counted({ environmentId: "env-3", projectId: ProjectId.make("x") })).toEqual([
+      "authored",
+    ]);
   });
 
   it("reads every environment's hidden links, regardless of case", () => {
