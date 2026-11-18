@@ -122,6 +122,8 @@ export class BitbucketResponseError extends Schema.TaggedError<BitbucketResponse
     status: Schema.Int,
     responseBodyLength: NonNegativeInt,
     retryAt: Schema.optional(Schema.Number),
+    /** The request carried no credential, so a refusal can mean the server needs one. */
+    anonymous: Schema.optional(Schema.Boolean),
   },
 ) {
   get detail(): string {
@@ -139,6 +141,7 @@ export class BitbucketResponseBodyReadError extends Schema.TaggedError<Bitbucket
     operation: BitbucketApiOperation,
     status: Schema.Int,
     retryAt: Schema.optional(Schema.Number),
+    anonymous: Schema.optional(Schema.Boolean),
     cause: Schema.Defect(),
   },
 ) {
@@ -628,6 +631,7 @@ const responseError = Effect.fn("BitbucketApi.responseError")(function* (
 ): Effect.fn.Return<never, BitbucketApiError> {
   const now = yield* Clock.currentTimeMillis;
   const retryAt = SourceControlRateLimit.retryAtFromHeader(response.headers["retry-after"], now);
+  const anonymous = response.request.headers.authorization === undefined;
   const collected = yield* collectUint8StreamText({
     stream: response.stream,
     maxBytes: DEFAULT_MAX_RESPONSE_BYTES,
@@ -638,6 +642,7 @@ const responseError = Effect.fn("BitbucketApi.responseError")(function* (
           operation,
           status: response.status,
           retryAt,
+          anonymous,
           cause,
         }),
     ),
@@ -647,6 +652,7 @@ const responseError = Effect.fn("BitbucketApi.responseError")(function* (
     status: response.status,
     responseBodyLength: collected.text.length,
     retryAt,
+    anonymous,
   });
 });
 

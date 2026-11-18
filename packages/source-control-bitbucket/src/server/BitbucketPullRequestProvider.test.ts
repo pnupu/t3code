@@ -204,16 +204,26 @@ it.effect("serves only Bitbucket Cloud hosts unless an API base url is configure
 );
 
 describe("bitbucketProviderFailure", () => {
-  it("treats only an HTTP 401 as unusable credentials", () => {
-    const responseError = (status: number) =>
-      new BitbucketApi.BitbucketResponseError({
-        operation: "request",
-        status,
-        responseBodyLength: 0,
-      });
+  const responseError = (status: number, anonymous = false) =>
+    new BitbucketApi.BitbucketResponseError({
+      operation: "request",
+      status,
+      responseBodyLength: 0,
+      anonymous,
+    });
 
+  it("treats only an HTTP 401 as unusable credentials", () => {
     expect(bitbucketProviderFailure(responseError(401)).reason).toBe("unauthenticated");
     expect(bitbucketProviderFailure(responseError(403)).reason).toBe("failed");
+    expect(bitbucketProviderFailure(responseError(404)).reason).toBe("not-found");
+    expect(bitbucketProviderFailure(responseError(429)).reason).toBe("rate-limited");
+  });
+
+  it("blames the missing credential when Bitbucket refuses an anonymous request", () => {
+    for (const status of [401, 403, 404, 429]) {
+      expect(bitbucketProviderFailure(responseError(status, true)).reason).toBe("missing-tool");
+    }
+    expect(bitbucketProviderFailure(responseError(500, true)).reason).toBe("failed");
   });
 
   it("reports a request held back by the host-wide pause as rate limited until it ends", () => {

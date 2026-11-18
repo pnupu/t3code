@@ -787,6 +787,28 @@ it.effect("reports saved credentials as configured when Bitbucket cannot confirm
   }).pipe(Effect.provide(layer));
 });
 
+it.effect("marks a refused request that went out without a credential as anonymous", () => {
+  const { layer } = makeLayer({
+    response: () => new Response("Not found", { status: 404 }),
+    env: { T3CODE_BITBUCKET_API_BASE_URL: "https://api.test.local/2.0" },
+  });
+
+  return Effect.gen(function* () {
+    const bitbucket = yield* BitbucketApi.BitbucketApi;
+    const settings = yield* TestSourceControlHost.TestSourceControlHostSettings;
+    const read = bitbucket
+      .request({ method: "GET", url: "/repositories/acme/private" })
+      .pipe(Effect.flip);
+
+    assert.deepInclude(yield* read, { _tag: "BitbucketResponseError", anonymous: true });
+
+    yield* settings.update({
+      sourceControlHosts: { bitbucket: { accessToken: "saved-access-token" } },
+    });
+    assert.deepInclude(yield* read, { _tag: "BitbucketResponseError", anonymous: false });
+  }).pipe(Effect.provide(layer));
+});
+
 it.effect("keeps Bitbucket response bodies out of checkout diagnostics", () => {
   const responseBody = '{"error":{"message":"credential=secret-value"}}';
   const { layer } = makeLayer({
