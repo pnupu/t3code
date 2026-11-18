@@ -53,7 +53,12 @@ import {
   ProviderInstanceId,
   ProviderDriverKind,
 } from "./providerInstance.ts";
-import { HiddenPullRequests, PullRequestFeedRule, PullRequestMergeMethod } from "./pullRequest.ts";
+import {
+  HiddenPullRequests,
+  HiddenPullRequestsPatch,
+  PullRequestFeedRule,
+  PullRequestMergeMethod,
+} from "./pullRequest.ts";
 import {
   CloudSpeechModelId,
   SpeechAcceleration,
@@ -1562,7 +1567,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   pullRequestFeed: PullRequestFeedRule.pipe(Schema.withDecodingDefault(Effect.succeed("all"))),
-  hiddenPullRequests: HiddenPullRequests.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  hiddenPullRequests: HiddenPullRequests.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 
   // Schema.Unknown preserves unknown-driver configs across versions; see providerInstance.ts.
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
@@ -1952,7 +1957,7 @@ export const ServerSettingsPatch = Schema.Struct({
   reviewGuideInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
   pullRequestFeed: Schema.optionalKey(PullRequestFeedRule),
-  hiddenPullRequests: Schema.optionalKey(HiddenPullRequests),
+  hiddenPullRequests: Schema.optionalKey(HiddenPullRequestsPatch),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),

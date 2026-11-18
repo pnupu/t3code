@@ -67,12 +67,18 @@ export type PullRequestMergeMethod = typeof PullRequestMergeMethod.Type;
 export const PullRequestFeedRule = Schema.Literals(["all", "reviewing", "authored", "hidden"]);
 export type PullRequestFeedRule = typeof PullRequestFeedRule.Type;
 
-export const HIDDEN_PULL_REQUESTS_LIMIT = 500;
-/** Pull request URLs the user hid from the feed, compared case-insensitively. */
-export const HiddenPullRequests = Schema.Array(
-  Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048)),
-).check(Schema.isMaxLength(HIDDEN_PULL_REQUESTS_LIMIT));
+const HiddenPullRequestUrl = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048));
+/**
+ * Pull request URLs hidden from the feed, lowercased. A record, not a list, so each hide or unhide
+ * patches one key and concurrent writers cannot erase each other.
+ */
+export const HiddenPullRequests = Schema.Record(HiddenPullRequestUrl, Schema.Literal(true));
 export type HiddenPullRequests = typeof HiddenPullRequests.Type;
+/** `true` hides a link, `null` shows it again. */
+export const HiddenPullRequestsPatch = Schema.Record(
+  HiddenPullRequestUrl,
+  Schema.NullOr(Schema.Literal(true)),
+);
 
 export const PullRequestAction = Schema.Literals([
   "merge",

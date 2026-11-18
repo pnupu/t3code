@@ -1,13 +1,11 @@
 import {
-  hiddenPullRequestList,
+  hiddenPullRequestKey,
   hiddenPullRequestUrls,
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
-  withHiddenPullRequest,
-  withoutHiddenPullRequest,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   AuthSettingsWriteScope,
@@ -54,7 +52,7 @@ export function usePullRequestFeed() {
       ?.settings;
   const allSettings = environments.map((environment) => environment.serverConfig?.settings);
   const hidden = hiddenPullRequestUrls(allSettings);
-  const hiddenUrls = hiddenPullRequestList(allSettings);
+  const hiddenUrls = [...hidden];
 
   const ruleFor = (entry: { environmentId: EnvironmentId; projectId: ProjectId }) =>
     pullRequestFeedRule(settingsOf(entry.environmentId), entry.projectId);
@@ -73,10 +71,7 @@ export function usePullRequestFeed() {
   const hidesRepository = (project: { environmentId: EnvironmentId; id: ProjectId }) =>
     pullRequestProjectHidesRepository(
       ruleFor({ environmentId: project.environmentId, projectId: project.id }),
-      {
-        connected: connected.has(project.environmentId),
-        writable: canWrite(project.environmentId),
-      },
+      { connected: connected.has(project.environmentId) },
     );
   // A repository one environment hides leaves every environment's copy, including carried rows.
   const repositoryHidden = pullRequestRepositoryHidden(projects, hidesRepository);
@@ -87,23 +82,21 @@ export function usePullRequestFeed() {
         isPullRequestHidden(hiddenPullRequestUrls([environment.serverConfig?.settings]), url),
     );
 
+  // One key per write, so concurrent hides and unhides from anywhere cannot erase each other.
   const hide = (entry: Pick<EnvironmentPullRequestEntry, "environmentId" | "url">) =>
     runPlan(
       environments.filter((environment) => environment.environmentId === entry.environmentId),
       (current) =>
-        planEnvironmentSettingsPatch(current, (settings) => ({
-          hiddenPullRequests: withHiddenPullRequest(settings.hiddenPullRequests, entry.url),
-        })),
+        planEnvironmentSettingsPatch(current, {
+          hiddenPullRequests: { [hiddenPullRequestKey(entry.url)]: true },
+        }),
     );
 
   // Every environment that holds the link hides it, so unhiding clears them all.
   const unhide = (url: string) =>
     runPlan(holders(url), (current) =>
-      planEnvironmentSettingsPatch(current, (settings) => {
-        const next = withoutHiddenPullRequest(settings.hiddenPullRequests, url);
-        return next.length === settings.hiddenPullRequests.length
-          ? null
-          : { hiddenPullRequests: next };
+      planEnvironmentSettingsPatch(current, {
+        hiddenPullRequests: { [hiddenPullRequestKey(url)]: null },
       }),
     );
 

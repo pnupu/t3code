@@ -28,9 +28,7 @@ export function useSettingsWriter() {
           environmentId: entry.environmentId,
           input: { patch: entry.patch },
         });
-        if (result._tag !== "Failure") return null;
-        // Interrupted is not saved, but is not worth an alert either.
-        if (isAtomCommandInterrupted(result)) return "";
+        if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return null;
         const label =
           targets.find((target) => target.environment.environmentId === entry.environmentId)
             ?.environment.label ?? entry.environmentId;
@@ -38,13 +36,9 @@ export function useSettingsWriter() {
         return `${label}: ${error instanceof Error ? error.message : String(error)}`;
       }),
     );
-    const failures = outcomes.filter((outcome) => outcome !== null && outcome !== "");
+    const failures = outcomes.filter((outcome) => outcome !== null);
     if (failures.length > 0) {
       Dialog.alert("Could not save settings", failures.join("\n\n"));
     }
-    /** The environments whose write was not saved. */
-    return writes.flatMap((entry, index) =>
-      outcomes[index] === null ? [] : [entry.environmentId],
-    );
   };
 }

@@ -540,19 +540,18 @@ export function planProjectOverridePatch(
   );
 }
 
-/** Environment-wide writes computed from each environment's newest settings. */
+/** One environment-wide patch for each connected environment. */
 export function planEnvironmentSettingsPatch(
   environments: readonly ScopedSettingsEnvironment[],
-  update: (settings: ServerSettings) => ServerSettingsPatch | null,
+  patch: ServerSettingsPatch,
 ): ScopedSettingsPlan {
   return unavailablePlan(
     environments.flatMap((environment) => {
       const previous = environment.serverConfig?.settings;
       if (!previous || environment.connection.phase !== "connected") return [];
-      const patch = update(previous);
-      return patch === null
-        ? []
-        : [{ environmentId: environment.environmentId, label: environment.label, previous, patch }];
+      return [
+        { environmentId: environment.environmentId, label: environment.label, previous, patch },
+      ];
     }),
     "Connect the environment to save this setting.",
   );
