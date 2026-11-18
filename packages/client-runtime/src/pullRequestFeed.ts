@@ -118,23 +118,33 @@ export interface PullRequestFeedOptions<Entry> {
   readonly repositoryHidden?: (entry: Entry) => boolean;
 }
 
-export const pullRequestRepositoryKey = (entry: {
-  readonly host: string;
-  readonly repository: string;
-}): string => `${entry.host.toLowerCase()} ${entry.repository.toLowerCase()}`;
-
-/** Repositories some environment's `hidden` project lists, keyed by host and repository. */
-export function hiddenPullRequestRepositories<
-  Entry extends { readonly host: string; readonly repository: string },
+/**
+ * Whether a row's repository is one some environment's project hides, matched on the projects'
+ * repository keys like the web query assignment, so every environment's copy leaves the feed.
+ */
+export function pullRequestRepositoryHidden<
+  Project extends {
+    readonly id: ProjectId;
+    readonly environmentId: string;
+    readonly repositoryIdentity?: { readonly canonicalKey?: string | undefined } | null | undefined;
+  },
 >(
-  entries: ReadonlyArray<Entry>,
-  ruleFor: (entry: Entry) => PullRequestFeedRule,
-): ReadonlySet<string> {
-  return new Set(
-    entries.flatMap((entry) =>
-      ruleFor(entry) === "hidden" ? [pullRequestRepositoryKey(entry)] : [],
-    ),
-  );
+  projects: ReadonlyArray<Project>,
+  isHidden: (project: Project) => boolean,
+): (entry: { readonly environmentId: string; readonly projectId: ProjectId }) => boolean {
+  const keys = new Map<string, string>();
+  const hidden = new Set<string>();
+  for (const project of projects) {
+    const key = project.repositoryIdentity?.canonicalKey?.toLowerCase();
+    if (!key) continue;
+    keys.set(`${project.environmentId} ${project.id}`, key);
+    if (isHidden(project)) hidden.add(key);
+  }
+  return (entry) => {
+    if (hidden.size === 0) return false;
+    const key = keys.get(`${entry.environmentId} ${entry.projectId}`);
+    return key !== undefined && hidden.has(key);
+  };
 }
 
 /** `rule` drops the row silently; `hidden` is a row the user hid and can show again. */
