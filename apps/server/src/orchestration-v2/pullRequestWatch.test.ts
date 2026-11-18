@@ -175,7 +175,7 @@ describe("evaluatePullRequestWatch", () => {
       noRemarks,
     );
     assert.deepEqual(failed.changes, [
-      { kind: "checks-failed", failed: [check("test", "failure")] },
+      { kind: "checks-failed", failed: [check("test", "failure")], settled: true },
     ]);
     const clean = evaluatePullRequestWatch(
       failed.next,
@@ -231,7 +231,7 @@ describe("evaluatePullRequestWatch", () => {
         detail({ checks: [check("lint", "success"), check("gated", "failure")] }),
         noRemarks,
       ).changes,
-      [{ kind: "checks-failed", failed: [check("gated", "failure")] }],
+      [{ kind: "checks-failed", failed: [check("gated", "failure")], settled: true }],
     );
   });
 
@@ -272,7 +272,7 @@ describe("evaluatePullRequestWatch", () => {
       noRemarks,
     );
     assert.deepEqual(failed.changes, [
-      { kind: "checks-failed", failed: [check("test", "failure")] },
+      { kind: "checks-failed", failed: [check("test", "failure")], settled: true },
     ]);
   });
 
@@ -315,7 +315,7 @@ describe("evaluatePullRequestWatch", () => {
           .changes,
         status === "success"
           ? [{ kind: "checks-passed", count: 1, required: false }]
-          : [{ kind: "checks-failed", failed: [check("test", "failure")] }],
+          : [{ kind: "checks-failed", failed: [check("test", "failure")], settled: true }],
       );
     },
   );
@@ -526,6 +526,11 @@ describe("evaluatePullRequestWatch", () => {
       evaluatePullRequestWatch(settled.next, detail({ checks: reviewed }), noRemarks).changes,
       [],
     );
+    // A failure in the read where the rest finish says so, since no later read will.
+    const together = evaluatePullRequestWatch(lint.next, detail({ checks: reviewed }), noRemarks);
+    assert.deepEqual(together.changes, [
+      { kind: "checks-failed", failed: [check("test", "failure")], settled: true },
+    ]);
     // A push elsewhere in the thread drops the pending answer; the finish is still news.
     const { checksPending: _dropped, ...reopened } = test.next;
     assert.deepEqual(
@@ -683,7 +688,7 @@ describe("evaluatePullRequestWatch", () => {
     const failed = detail({ checks: [required, check("e2e", "failure")] });
     const failure = evaluatePullRequestWatch(first.next, failed, noRemarks);
     assert.deepEqual(failure.changes, [
-      { kind: "checks-failed", failed: [check("e2e", "failure")] },
+      { kind: "checks-failed", failed: [check("e2e", "failure")], settled: true },
     ]);
     const repeated = evaluatePullRequestWatch(failure.next, failed, noRemarks);
     assert.deepEqual(repeated.changes, []);
@@ -992,7 +997,7 @@ describe("evaluatePullRequestWatch", () => {
     assert.equal(read.next.mergeQueueRemovalId, "landed");
   });
 
-  it("does not spend the comment wake limit on check results", () => {
+  it("does not spend the wake limit on check failures", () => {
     const tired = watch({ headSha: "aaaaaaaaaa", wakes: PULL_REQUEST_WATCH_WAKE_LIMIT - 1 });
     const result = evaluatePullRequestWatch(
       tired,
@@ -1016,6 +1021,7 @@ describe("evaluatePullRequestWatch", () => {
       ["checks-finished", "remarks"],
     );
     assert.isTrue(looped.exhausted);
+    assert.isTrue(evaluatePullRequestWatch(rerun, rerunDone, noRemarks).exhausted);
     const pushed = evaluatePullRequestWatch(tired, detail({ headSha: "cccccccccc" }), comments);
     assert.isFalse(pushed.exhausted);
     assert.equal(pushed.next.wakes, 1);
