@@ -16,8 +16,9 @@ import {
 import { useEnvironments } from "../state/environments";
 import { SettingsScopeNotice } from "../components/settings/SettingsScopeNotice";
 import { SETTINGS_DEVICE_ONLY_PATHS } from "../components/settings/SettingsScopeSentence";
-import { SettingsPageContainer } from "../components/settings/settingsLayout";
+import { SettingsPageContainer, SettingsSection } from "../components/settings/settingsLayout";
 import { useRenderedSettingsPathname } from "../components/settings/useRenderedSettingsPathname";
+import { PullRequestFeedRulesSetting } from "../components/settings/PullRequestFeedRulesSetting";
 import {
   retainSettingsScope,
   validateSettingsRouteSearch,
@@ -138,6 +139,12 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
             Reconnect <Var>{scope.label}</Var> to change its settings.
           </T>
         </p>
+        {/* The overview reads cached rules and says per row what needs a connection. */}
+        {pathname === "/settings/source-control" ? (
+          <SettingsSection title="Repositories">
+            <PullRequestFeedRulesSetting environmentIds={scope.environmentIds} />
+          </SettingsSection>
+        ) : null}
       </SettingsPageContainer>
     );
   }

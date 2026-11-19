@@ -1,8 +1,10 @@
-import type {
-  ProjectId,
-  PullRequestFeedRule,
-  PullRequestInvolvement,
-  ServerSettings,
+import {
+  isManagedSettingPath,
+  type ManagedPolicySummary,
+  type ProjectId,
+  type PullRequestFeedRule,
+  type PullRequestInvolvement,
+  type ServerSettings,
 } from "@t3tools/contracts";
 
 export type PullRequestFeedSettings = Pick<
@@ -235,7 +237,26 @@ export function filterPullRequestFeed<
 }
 
 /** Why this client cannot change a copy's rule, or `writable`. */
-export type PullRequestFeedRuleAccess = "writable" | "disconnected" | "outdated" | "read-only";
+export type PullRequestFeedRuleAccess =
+  | "writable"
+  | "disconnected"
+  | "outdated"
+  | "managed"
+  | "read-only";
+
+/** What an environment tells the overview about its copies. */
+export interface PullRequestFeedRuleEnvironment {
+  readonly label: string;
+  readonly settings: PullRequestFeedSettings;
+  readonly connected: boolean;
+  /** The server stores the rule; older ones drop it. */
+  readonly capable: boolean;
+  /** This connection holds the settings write grant there. */
+  readonly writeGranted: boolean;
+  readonly managedPolicy?:
+    | Pick<ManagedPolicySummary, "organization" | "lockedSettings">
+    | undefined;
+}
 
 export interface PullRequestFeedRuleCopy<Project> {
   readonly project: Project;
@@ -244,6 +265,8 @@ export interface PullRequestFeedRuleCopy<Project> {
   /** False when the project inherits its environment's default rule. */
   readonly overridden: boolean;
   readonly access: PullRequestFeedRuleAccess;
+  /** The organization whose policy locks the rule, when `access` is `managed`. */
+  readonly managedBy: string | null;
 }
 
 export interface PullRequestFeedRuleRow<Project> {
@@ -263,13 +286,26 @@ const ruleLabel = (rule: PullRequestFeedRule) =>
   PULL_REQUEST_FEED_RULES.find((option) => option.value === rule)?.label ?? rule;
 
 const ACCESS_NOTES: Record<
-  Exclude<PullRequestFeedRuleAccess, "writable">,
+  Exclude<PullRequestFeedRuleAccess, "writable" | "managed">,
   (on: string) => string
 > = {
   disconnected: (on) => `Connect ${on} to change it.`,
   outdated: (on) => `Update ${on} to change it.`,
   "read-only": (on) => `This connection cannot change settings on ${on}.`,
 };
+
+function pullRequestFeedRuleAccess(environment: PullRequestFeedRuleEnvironment): {
+  readonly access: PullRequestFeedRuleAccess;
+  readonly managedBy: string | null;
+} {
+  if (!environment.connected) return { access: "disconnected", managedBy: null };
+  if (!environment.capable) return { access: "outdated", managedBy: null };
+  // The server refuses a project override of a locked setting too.
+  if (isManagedSettingPath(environment.managedPolicy, "pullRequestFeed")) {
+    return { access: "managed", managedBy: environment.managedPolicy?.organization ?? null };
+  }
+  return { access: environment.writeGranted ? "writable" : "read-only", managedBy: null };
+}
 
 const unique = (values: ReadonlyArray<string>) => [...new Set(values)];
 
@@ -282,13 +318,9 @@ export function pullRequestFeedRuleRows<
   Project extends RepositoryProject & { readonly title: string },
 >(
   projects: ReadonlyArray<Project>,
-  environmentOf: (environmentId: Project["environmentId"]) =>
-    | {
-        readonly label: string;
-        readonly settings: PullRequestFeedSettings;
-        readonly access: PullRequestFeedRuleAccess;
-      }
-    | undefined,
+  environmentOf: (
+    environmentId: Project["environmentId"],
+  ) => PullRequestFeedRuleEnvironment | undefined,
 ): ReadonlyArray<PullRequestFeedRuleRow<Project>> {
   const groups = new Map<string, { name: string; copies: PullRequestFeedRuleCopy<Project>[] }>();
   for (const project of projects) {
@@ -303,7 +335,7 @@ export function pullRequestFeedRuleRows<
       rule: pullRequestFeedRule(environment.settings, project.id),
       overridden:
         environment.settings.projectSettingsOverrides[project.id]?.pullRequestFeed !== undefined,
-      access: environment.access,
+      ...pullRequestFeedRuleAccess(environment),
     };
     const group = groups.get(key);
     if (group) group.copies.push(copy);
@@ -333,6 +365,16 @@ export function pullRequestFeedRuleRows<
         copies.filter((copy) => copy.access === access).map((copy) => copy.environmentLabel),
       );
       if (on.length > 0) notes.push(ACCESS_NOTES[access](on.join(", ")));
+    }
+    for (const organization of unique(
+      copies.flatMap((copy) => (copy.managedBy === null ? [] : [copy.managedBy])),
+    )) {
+      const on = unique(
+        copies
+          .filter((copy) => copy.managedBy === organization)
+          .map((copy) => copy.environmentLabel),
+      );
+      notes.push(`Managed by ${organization} on ${on.join(", ")}.`);
     }
     return {
       key,
