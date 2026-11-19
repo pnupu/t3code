@@ -8,6 +8,7 @@ import {
   BrowserImportFailureReason,
   BROWSER_PROFILE_MAX_COUNT,
   type BrowserLinkTarget,
+  type BrowserModifiedLinkTarget,
   type BrowserProfile,
   BrowserSearchEngine,
   BROWSER_CUSTOM_SEARCH_URL_MAX_LENGTH,
@@ -17,6 +18,8 @@ import {
   DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW,
   DEFAULT_BROWSER_PROFILE_ID,
   DEFAULT_BROWSER_LINK_TARGET,
+  DEFAULT_BROWSER_MOD_CLICK_LINK_TARGET,
+  DEFAULT_BROWSER_MOD_SHIFT_CLICK_LINK_TARGET,
   DEFAULT_BROWSER_RECORDING_FRAME_RATE,
   DEFAULT_BROWSER_SEARCH_ENGINE,
   DEFAULT_BROWSER_VIEWPORT,
@@ -46,7 +49,7 @@ import { useRef, useState } from "react";
 import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { resolveEnvironmentOptionLabel } from "~/components/BranchToolbar.logic";
 import { previewBridge } from "~/components/preview/previewBridge";
-import { cn, randomUUID } from "~/lib/utils";
+import { cn, isMacPlatform, randomUUID } from "~/lib/utils";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { deviceEnvironment, useDeviceState } from "~/state/device";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
@@ -665,7 +668,7 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
     <SettingsRow
       {...searchableSetting("browser-link-target")}
       devicePreference
-      description="Where links in the chat and terminal open. Hold ⌘ or Ctrl while clicking a link to open it in your default browser either way."
+      description="Where links in the chat and terminal open when you click them."
       resetAction={
         !disabled && linkTarget !== DEFAULT_BROWSER_LINK_TARGET ? (
           <SettingResetButton
@@ -691,6 +694,79 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
             {(Object.keys(LINK_TARGET_LABELS) as ReadonlyArray<BrowserLinkTarget>).map((target) => (
               <SelectItem hideIndicator key={target} value={target}>
                 {LINK_TARGET_LABELS[target]}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
+    />
+  );
+}
+
+const MODIFIED_LINK_TARGET_LABELS: Readonly<Record<BrowserModifiedLinkTarget, string>> = {
+  system: "Your default browser",
+  local: "T3 Code on this device",
+  environment: "T3 Code on the thread's machine",
+};
+
+const MODIFIED_LINK_TARGET_SETTINGS = {
+  mod: {
+    id: "browser-mod-click-link-target",
+    key: "browserModClickLinkTarget",
+    defaultValue: DEFAULT_BROWSER_MOD_CLICK_LINK_TARGET,
+    shift: false,
+  },
+  "mod-shift": {
+    id: "browser-mod-shift-click-link-target",
+    key: "browserModShiftClickLinkTarget",
+    defaultValue: DEFAULT_BROWSER_MOD_SHIFT_CLICK_LINK_TARGET,
+    shift: true,
+  },
+} as const;
+
+function BrowserModifiedLinkTargetSetting({
+  gesture,
+}: {
+  readonly gesture: keyof typeof MODIFIED_LINK_TARGET_SETTINGS;
+}) {
+  const { id, key, defaultValue, shift } = MODIFIED_LINK_TARGET_SETTINGS[gesture];
+  const linkTarget = useClientSettings((settings) => settings[key]);
+  const updateSettings = useUpdateScopedSettings();
+  const mac = isMacPlatform(navigator.platform);
+  const gestureLabel = `${mac ? "⌘" : "Ctrl"}${shift ? (mac ? "⇧" : "+Shift") : ""}-click`;
+
+  return (
+    <SettingsRow
+      {...searchableSetting(id)}
+      title={`${gestureLabel} links`}
+      devicePreference
+      description={`Where links in the chat and terminal open when you ${gestureLabel} them. When the browser you pick can't open a link, it opens in your default browser.`}
+      resetAction={
+        linkTarget !== defaultValue ? (
+          <SettingResetButton
+            label={`${gestureLabel} link target`}
+            onClick={() => updateSettings({ [key]: defaultValue })}
+          />
+        ) : null
+      }
+      control={
+        <Select
+          value={linkTarget}
+          onValueChange={(value) => {
+            if (value === "system" || value === "local" || value === "environment") {
+              updateSettings({ [key]: value });
+            }
+          }}
+        >
+          <SelectTrigger size="sm" className="w-full sm:w-56" aria-label={`${gestureLabel} links`}>
+            <SelectValue>{MODIFIED_LINK_TARGET_LABELS[linkTarget]}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {(
+              Object.keys(MODIFIED_LINK_TARGET_LABELS) as ReadonlyArray<BrowserModifiedLinkTarget>
+            ).map((target) => (
+              <SelectItem hideIndicator key={target} value={target}>
+                {MODIFIED_LINK_TARGET_LABELS[target]}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -1606,6 +1682,9 @@ export function BrowserSettingsPanel() {
           <BrowserLinkTargetSetting disabled={desktopOnly} />
           <BrowserAutoShowFloatingPreviewSetting disabled={desktopOnly} />
         </SettingsUnavailableGroup>
+        {/* Not desktop-only: web clients open links in server-run browser tabs too. */}
+        <BrowserModifiedLinkTargetSetting gesture="mod" />
+        <BrowserModifiedLinkTargetSetting gesture="mod-shift" />
         {/* Not desktop-only: web clients search from server-run browser tabs too. */}
         <BrowserSearchEngineSetting />
         <AdvancedSettings

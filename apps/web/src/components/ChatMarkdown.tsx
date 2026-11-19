@@ -196,7 +196,11 @@ import {
   BrowserPreviewUnavailableError,
   isBrowserSettingsReadError,
 } from "../browser/openFileInPreview";
-import { resolveLinkTarget } from "../browser/browserLinkTarget";
+import {
+  canOpenLinkIn,
+  type InAppLinkTarget,
+  resolveLinkTarget,
+} from "../browser/browserLinkTarget";
 import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
 import { MarkdownCodeBlock, SuspenseShikiCodeBlock } from "./chat/MarkdownCodeBlock";
 import { createMarkdownRenderer } from "./chat/markdownRenderer";
@@ -700,6 +704,10 @@ function useChatMarkdownState({
   const openDeferredMarkdownLink = useOpenLink(threadRef);
   // Subscribe so hydrated settings apply before the anchor synchronously decides whether to intercept _blank.
   const linkTargetPreference = useClientSettings((settings) => settings.browserLinkTarget);
+  const modClickLinkTarget = useClientSettings((settings) => settings.browserModClickLinkTarget);
+  const modShiftClickLinkTarget = useClientSettings(
+    (settings) => settings.browserModShiftClickLinkTarget,
+  );
   const mathEnabled = useClientSettings((settings) => settings.mathRenderingEnabled);
   // Keyed by the file links found, not the text, so streamed text that adds none keeps the
   // renderer context, and every block reading it, unchanged.
@@ -730,7 +738,7 @@ function useChatMarkdownState({
     if (!readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)) return;
     await pullRequestLinking.changeLink(threadRef, href, linked);
   };
-  const openExternalLinkInPreview = (url: string) => {
+  const openExternalLinkInPreview = (url: string, target?: InAppLinkTarget) => {
     if (!threadRef || !canOperatePreview) {
       return Promise.resolve(
         AsyncResult.failure<void, BrowserPreviewUnavailableError>(
@@ -742,7 +750,12 @@ function useChatMarkdownState({
         ),
       );
     }
-    return openUrlInPreview({ threadRef, url, openPreview }).then((result) => {
+    return openUrlInPreview({
+      threadRef,
+      url,
+      openPreview,
+      ...(target === undefined ? {} : { target }),
+    }).then((result) => {
       if (result._tag === "Success") recordVisitForThread(threadRef, url);
       else if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
@@ -988,6 +1001,8 @@ function useChatMarkdownState({
     mathEnabled,
     isStreaming,
     linkTargetPreference,
+    modClickLinkTarget,
+    modShiftClickLinkTarget,
     markdownFileLinkMetaByHref,
     onTaskListChange,
     onUseArtifactTemplate,
@@ -1160,6 +1175,8 @@ const CHAT_MARKDOWN_COMPONENTS = {
       openChangeRequestLink,
       openDeferredMarkdownLink,
       linkTargetPreference,
+      modClickLinkTarget,
+      modShiftClickLinkTarget,
       openExternalLinkInPreview,
       projects,
       linkedThreadPullRequestFor,
@@ -1278,14 +1295,17 @@ const CHAT_MARKDOWN_COMPONENTS = {
               return;
             }
             if (event.defaultPrevented) return;
-            if (
-              resolveLinkTarget({
-                url: href,
-                event,
-                preference: linkTargetPreference,
-                canOpenInApp: canOpenInPreview,
-              }) !== "app"
-            ) {
+            const linkTarget = resolveLinkTarget({
+              url: href,
+              event,
+              settings: {
+                browserLinkTarget: linkTargetPreference,
+                browserModClickLinkTarget: modClickLinkTarget,
+                browserModShiftClickLinkTarget: modShiftClickLinkTarget,
+              },
+              canOpenIn: (target) => canOpenInPreview && canOpenLinkIn(threadRef, target),
+            });
+            if (linkTarget === "system") {
               // Open desktop Alt-clicks before Chromium downloads them so link routers can read the held key.
               if (isElectron && event.altKey) {
                 event.preventDefault();
@@ -1303,7 +1323,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
             }
             event.preventDefault();
             event.stopPropagation();
-            void openExternalLinkInPreview(href).then((result) => {
+            void openExternalLinkInPreview(href, linkTarget).then((result) => {
               if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
               reportMarkdownActionFailure(
                 { operation: "open-link-in-preview", target: href },

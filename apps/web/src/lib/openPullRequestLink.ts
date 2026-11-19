@@ -11,7 +11,12 @@ import {
 
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 
-import { canOpenLinksInApp } from "../browser/browserLinkTarget";
+import {
+  canOpenLinkIn,
+  canOpenLinksInApp,
+  resolveLinkTarget,
+  useLinkTargetSettings,
+} from "../browser/browserLinkTarget";
 import { useOpenLink } from "../browser/useOpenLink";
 import { useClientSettings } from "../hooks/useSettings";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -243,14 +248,25 @@ export function useOpenChangeRequestLink(
 export function useOpenPrLink(threadRef?: ScopedThreadRef) {
   const openChangeRequest = useOpenChangeRequestLink(threadRef);
   const openLink = useOpenLink(threadRef);
+  const linkTargetSettings = useLinkTargetSettings();
   return (event: MouseEvent<HTMLElement>, prUrl: string, targetThreadRef?: ScopedThreadRef) => {
     if (event.button > 1) return false;
     event.stopPropagation();
     const openInBrowser = shouldOpenPullRequestExternally(event);
     const isAnchor =
       event.currentTarget instanceof HTMLAnchorElement && event.currentTarget.href.length > 0;
-    // Native links handle modified clicks; buttons still need openExternal.
-    if (openInBrowser && isAnchor) return false;
+    // Native links handle system-browser clicks; buttons and in-app targets still need openLink.
+    if (
+      openInBrowser &&
+      isAnchor &&
+      resolveLinkTarget({
+        url: prUrl,
+        event,
+        settings: linkTargetSettings,
+        canOpenIn: (target) => canOpenLinkIn(targetThreadRef ?? threadRef, target),
+      }) === "system"
+    )
+      return false;
 
     event.preventDefault();
     if (!openInBrowser && openChangeRequest(event, prUrl, targetThreadRef)) return true;

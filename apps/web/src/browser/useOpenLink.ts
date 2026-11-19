@@ -9,9 +9,10 @@ import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import {
-  canOpenLinksInApp,
-  resolveBrowserLinkTargetPreference,
+  canOpenLinkIn,
+  type LinkClickModifiers,
   resolveLinkTarget,
+  resolveLinkTargetSettings,
 } from "./browserLinkTarget";
 import { isBrowserSettingsReadError, openUrlInPreview } from "./openFileInPreview";
 
@@ -21,11 +22,7 @@ const NO_MODIFIER = { metaKey: false, ctrlKey: false } as const;
 export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
   url: string,
   options?: {
-    readonly event?: {
-      readonly metaKey: boolean;
-      readonly ctrlKey: boolean;
-      readonly button?: number | undefined;
-    };
+    readonly event?: LinkClickModifiers;
     readonly threadRef?: ScopedThreadRef | undefined;
   },
 ) => Promise<void> {
@@ -35,11 +32,16 @@ export function useOpenLink(threadRef: ScopedThreadRef | null | undefined): (
     const target = resolveLinkTarget({
       url,
       event: options.event ?? NO_MODIFIER,
-      preference: await resolveBrowserLinkTargetPreference(),
-      canOpenInApp: canOpenLinksInApp(targetThreadRef),
+      settings: await resolveLinkTargetSettings(),
+      canOpenIn: (inAppTarget) => canOpenLinkIn(targetThreadRef, inAppTarget),
     });
-    if (target === "app" && targetThreadRef) {
-      const result = await openUrlInPreview({ threadRef: targetThreadRef, url, openPreview });
+    if (target !== "system" && targetThreadRef) {
+      const result = await openUrlInPreview({
+        threadRef: targetThreadRef,
+        url,
+        openPreview,
+        target,
+      });
       if (isAtomCommandInterrupted(result)) return;
       if (result._tag === "Success") {
         recordVisitForThread(targetThreadRef, url);

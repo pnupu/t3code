@@ -716,6 +716,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       browserRecordingShowKeyPresses: DEFAULT_UNIFIED_SETTINGS.browserRecordingShowKeyPresses,
       browserRecordingShowMousePresses: DEFAULT_UNIFIED_SETTINGS.browserRecordingShowMousePresses,
       browserLinkTarget: DEFAULT_UNIFIED_SETTINGS.browserLinkTarget,
+      browserModClickLinkTarget: DEFAULT_UNIFIED_SETTINGS.browserModClickLinkTarget,
+      browserModShiftClickLinkTarget: DEFAULT_UNIFIED_SETTINGS.browserModShiftClickLinkTarget,
       browserSearchEngine: DEFAULT_UNIFIED_SETTINGS.browserSearchEngine,
       browserCustomSearchUrl: DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl,
       browserAutoShowFloatingPreview: DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
