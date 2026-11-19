@@ -177,9 +177,13 @@ describe("pull request feed rules", () => {
       [project("env-1", "a1"), project("env-2", "a2")],
       (candidate) => (candidate.environmentId === "env-1" ? "authored" : "all"),
       (candidate) => candidate.environmentId === "env-1",
-      () => "authored",
+      (entry) => (entry.environmentId === "env-2" ? "all" : "authored"),
     );
-    expect(counted(row)).toEqual(["authored", "authored"]);
+    expect(counted(row)).toEqual(["authored"]);
+    // The row's own copy does not count, so its default "all" must not widen a counted narrower rule.
+    expect(counted({ environmentId: "env-2", projectId: ProjectId.make("a2") })).toEqual([
+      "authored",
+    ]);
     expect(counted({ environmentId: "env-3", projectId: ProjectId.make("x") })).toEqual([
       "authored",
     ]);
