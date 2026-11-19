@@ -565,6 +565,24 @@ describe("evaluatePullRequestWatch", () => {
       evaluatePullRequestWatch(blind.next, detail({ checks: reviewed }), noRemarks).changes,
       settled.changes,
     );
+    // So is a failure in the read where the rest finish, also after a read with nothing finished.
+    for (const [seen, failed] of [
+      [first.checks, [check("test", "failure")]],
+      [
+        [check("test", "pending"), bot],
+        [check("lint", "failure"), check("test", "failure")],
+      ],
+    ] as const) {
+      const before = evaluatePullRequestWatch(
+        watch({ awaitingBaseline: "all" }),
+        detail({ checks: [...seen, unavailable] }),
+        noRemarks,
+      ).next;
+      assert.deepEqual(
+        evaluatePullRequestWatch(before, detail({ checks: reviewed }), noRemarks).changes,
+        [{ kind: "checks-failed", failed, settled: true }],
+      );
+    }
     // A watch saved before finished names were kept learns them without waking.
     const { finishedChecks: _legacy, ...legacy } = settled.next;
     assert.deepEqual(

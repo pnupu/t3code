@@ -126,9 +126,12 @@ export function evaluatePullRequestWatch(
       ),
     ];
     const allDone = !checksPending && awaitingApproval.length === 0;
+    // An earlier read that saw checks but not approvals hides no failure or finish, only holds.
+    const checkNews =
+      !checksBaseline || (watch.awaitingBaseline === "checks" && watch.checksAwaitedSince === null);
     // The baseline hides failures from before the watch, but CI running at the start can fail
     // before the first read. Said here, since no later read has a finish left to report.
-    if (newlyFailed.length > 0 && (!checksBaseline || watch.checksPending === true)) {
+    if (newlyFailed.length > 0 && (checkNews || watch.checksPending === true)) {
       changes.push({
         kind: "checks-failed",
         failed: newlyFailed,
@@ -155,10 +158,8 @@ export function evaluatePullRequestWatch(
     // An empty or missing list is no baseline, as it is saved the same way.
     const known = finishedChecks ?? [];
     const finishedGrew = known.length > 0 && finishedNow.some((name) => !known.includes(name));
-    // A read whose approval lookup failed still saw these checks, so a finish since then is news.
-    const sawChecks = watch.awaitingBaseline === "checks" && known.length > 0;
     if (
-      (!checksBaseline || sawChecks) &&
+      checkNews &&
       newlyFailed.length === 0 &&
       failed.length > 0 &&
       allDone &&
