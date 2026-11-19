@@ -1247,6 +1247,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pull requests list feed authored waiting on me review requested hide exclude"],
   },
   {
+    id: "pull-request-feed-rules",
+    title: "Repository feed rules",
+    to: "/settings/source-control",
+    scope: "environment-defaults",
+    searchTerms: ["pull requests list feed per project repository override overview hide"],
+  },
+  {
     id: "source-control",
     title: msg("Source control"),
     to: "/settings/source-control",
