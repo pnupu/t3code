@@ -30,6 +30,7 @@ import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SourceControlSignInSection } from "./components/SourceControlSignInSection";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
+import { PullRequestFeedRulesSection } from "./components/PullRequestFeedRulesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import { useSettingsWriter } from "./useSettingsWriter";
 import {
@@ -181,7 +182,8 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const environmentMenu = useSettingsEnvironmentMenu();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { selectedTargets, projectGroups, selectedProjectKey } = useSettingsEnvironmentFilter();
+  const { selectedTargets, selectedIds, projectGroups, selectedProjectKey } =
+    useSettingsEnvironmentFilter();
   const selectedProject = projectGroups.find((group) => group.key === selectedProjectKey);
   const writableEnvironments = useEnvironmentsWithScope(selectedTargets, AuthSettingsWriteScope);
   const projectSelected = selectedProjectKey !== null;
@@ -482,6 +484,17 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       />
                     ))}
                   </SettingsSection>
+                ) : null}
+                {!projectSelected &&
+                targets.every(
+                  (target) =>
+                    target.environment.serverConfig.environment.capabilities.pullRequestFeed ===
+                    true,
+                ) ? (
+                  <PullRequestFeedRulesSection
+                    selectedIds={selectedIds}
+                    targets={selectedTargets}
+                  />
                 ) : null}
                 {projectSelected || feed.hiddenUrls.length === 0 ? null : (
                   <SettingsSection

@@ -253,7 +253,8 @@ project selector there. On web and desktop you can also right-click a pull reque
 rule for its project. When the same repository is a project on several connected environments,
 the list shows a pull request if any of their rules allows it, and **Hidden** on any of them
 hides the repository. Picking one project in the list's project filter shows all its pull
-requests.
+requests. **Repository feed rules** in Settings → Source control lists every repository's rule in
+one place, and a rule you pick there applies to every copy of that repository.
 
 To hide one pull request, right-click it on web and desktop, or touch and hold it on mobile, and
 choose **Hide from feed**. Hidden pull requests leave every list. Press **Show N hidden** in the

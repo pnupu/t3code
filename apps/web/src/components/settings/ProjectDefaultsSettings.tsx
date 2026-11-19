@@ -28,6 +28,7 @@ import { toastManager } from "../ui/toast";
 import { Switch } from "../ui/switch";
 import { resolveDefaultModelSettingsPresentation } from "./ProjectDefaultsSettings.logic";
 import type { ProjectSettingsCategory } from "./ProjectSettingsPanel";
+import { PullRequestFeedRulesSetting } from "./PullRequestFeedRulesSetting";
 import { searchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
 import {
@@ -571,6 +572,9 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 </Select>
               }
             />
+          ) : null}
+          {pullRequestFeedSupported && (scope.kind === "all" || scope.kind === "environment") ? (
+            <PullRequestFeedRulesSetting environmentIds={scope.environmentIds} />
           ) : null}
         </>
       )}
