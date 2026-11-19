@@ -244,9 +244,8 @@ export function PullRequestsScreen(
   // The involved listing is a project's only source of Others rows, so it pages with the list.
   const loadMore = (retry?: boolean) => {
     void result.loadMore(retry);
-    // A failed involved page is retried on the next request, since its error stops it otherwise.
-    if (involvedList.hasMore)
-      void involvedList.loadMore(retry || involvedList.loadMoreError !== null);
+    // Only an explicit retry reruns a failed page; scrolling stops at its error.
+    if (involvedList.hasMore) void involvedList.loadMore(retry);
   };
   const connectedTargets = targets.filter((target) =>
     environments.some(
@@ -507,7 +506,7 @@ export function PullRequestsScreen(
           </>
         }
         ListFooterComponent={
-          result.loadingMore ? (
+          result.loadingMore || involvedList.loadingMore ? (
             <View className="items-center py-5">
               <AppActivityIndicator
                 colorClassName="accent-icon"

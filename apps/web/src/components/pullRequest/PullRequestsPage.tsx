@@ -692,11 +692,14 @@ export function PullRequestsPage() {
     (environmentId) => nextCursors[environmentId] === undefined,
   );
   const canContinue = !showingCarried && Object.keys(nextCursors).length > 0;
-  // The involved read grows with every Load more, so the two lists cover the same span.
+  // A grown read still in flight was grown because the last answer was truncated.
   const involvedTruncated =
-    partitionsWanted && involvedQuery.data?.truncated === true && involvedPageSize < MAX_PAGE_SIZE;
+    partitionsWanted &&
+    involvedPageSize < MAX_PAGE_SIZE &&
+    (involvedQuery.data?.truncated === true ||
+      (involvedQuery.data === null && involvedPageSize > PAGE_SIZE));
   const loadMore = () => {
-    if (partitionTargets.involved.length > 0) {
+    if (involvedTruncated) {
       setInvolvedPage({
         key: filterKey,
         size: Math.min(involvedPageSize + PAGE_SIZE, MAX_PAGE_SIZE),
@@ -832,23 +835,15 @@ export function PullRequestsPage() {
   const involvedAnswer = involvedRead?.answer ?? null;
   const shownInvolved = usePendingListEntries(overlayInput, involvedAnswer?.entries);
   // A project's listing is ready once its environment answered without failing and the project
-  // itself was read without error; until then its rows show as under the All rule. At its largest
-  // page a truncated listing cannot reach older rows, so those show too.
-  const involvedFloor =
-    involvedRead?.answer.truncated === true && involvedPageSize >= MAX_PAGE_SIZE
-      ? involvedRead.answer.entries.reduce<string | null>(
-          (oldest, entry) =>
-            oldest === null || entry.updatedAt < oldest ? entry.updatedAt : oldest,
-          null,
-        )
-      : null;
+  // itself was read without error; until then its rows show as under the All rule.
+  // lean: the involved read stops at MAX_PAGE_SIZE rows per environment, so older Others rows of
+  // a project on the rule stay hidden past it. Revisit if someone is involved in more than that.
   const involved = pullRequestInvolvedMatcher(
     involvedRead === null
       ? null
       : {
           entries: involvedRead.answer.entries,
           ready: (entry: EnvironmentPullRequestEntry) =>
-            (involvedFloor === null || entry.updatedAt >= involvedFloor) &&
             involvedRead.answered.includes(entry.environmentId) &&
             !involvedQuery.failed.includes(entry.environmentId) &&
             involvedQueries.some(
