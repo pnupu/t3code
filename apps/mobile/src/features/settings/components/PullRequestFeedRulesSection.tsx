@@ -1,10 +1,11 @@
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRuleRows,
   type PullRequestFeedRuleRow,
 } from "@t3tools/client-runtime/pull-request-feed";
 import { AuthSettingsWriteScope, type EnvironmentId } from "@t3tools/contracts";
-import { useState } from "react";
+import { use, useState } from "react";
 import { Pressable, View } from "react-native";
 
 import { SymbolView } from "../../../components/ui/AppSymbol";
@@ -12,6 +13,7 @@ import { AppText as Text } from "../../../components/ui/AppText";
 import { Menu } from "../../../components/ui/Menu";
 import { useProjects } from "../../../state/entities";
 import { useEnvironments } from "../../../state/environments";
+import { environmentServerConfigsAtom } from "../../../state/server";
 import { useEnvironmentsWithScope } from "../../../state/session";
 import {
   planMobileScopedSettingsClear,
@@ -19,23 +21,38 @@ import {
   resolveMobileSettingsTargets,
 } from "../settings-scoped-server";
 import type { SettingsTarget } from "../settings-environment-filter";
+import { openSentFeedRules, type SentFeedRule } from "../sentFeedRules";
 import { useSettingsWriter } from "../useSettingsWriter";
 import { SettingsSection } from "./SettingsSection";
 
 const DEFAULT_ACTION = "default";
 
-/** Every repository's feed rule; a pick applies to every writable copy of the repository. */
+/**
+ * Every repository's feed rule; a pick applies to every writable copy of the repository. It reads
+ * cached settings, so it stays useful while environments are offline.
+ */
 export function PullRequestFeedRulesSection(props: {
   readonly selectedIds: ReadonlySet<EnvironmentId> | null;
   readonly targets: readonly SettingsTarget[];
 }) {
-  const { environments, presentationById } = useEnvironments();
+  const { environments } = useEnvironments();
+  const configs = useAtomValue(environmentServerConfigsAtom);
+  const registry = use(RegistryContext);
   const projects = useProjects();
   const writeSettings = useSettingsWriter();
   const writable = useEnvironmentsWithScope(props.targets, AuthSettingsWriteScope);
-  // Until the server pushes the saved settings, the rows still show the old rule.
-  const [sentOver, setSentOver] = useState<typeof presentationById | null>(null);
-  const pending = sentOver !== null && sentOver === presentationById;
+  // Each override this device sent locks the list until its server's settings answer it.
+  const [sent, setSent] = useState<ReadonlyArray<SentFeedRule<EnvironmentId>>>([]);
+  // A disconnected server will not push its answer, so its sends stop locking the list.
+  const pending =
+    openSentFeedRules(sent, (id) =>
+      environments.some(
+        (environment) =>
+          environment.environmentId === id && environment.connection.phase === "connected",
+      )
+        ? configs.get(id)?.settings
+        : undefined,
+    ).length > 0;
   const rows = pullRequestFeedRuleRows(
     projects.filter(
       (project) => props.selectedIds === null || props.selectedIds.has(project.environmentId),
@@ -44,19 +61,15 @@ export function PullRequestFeedRulesSection(props: {
       const environment = environments.find(
         (candidate) => candidate.environmentId === environmentId,
       );
-      const config = environment?.serverConfig;
+      const config = configs.get(environmentId);
       if (!environment || !config) return undefined;
       return {
         label: environment.label,
         settings: config.settings,
-        access:
-          environment.connection.phase !== "connected"
-            ? "disconnected"
-            : config.environment.capabilities.pullRequestFeed !== true
-              ? "outdated"
-              : writable.has(environmentId)
-                ? "writable"
-                : "read-only",
+        connected: environment.connection.phase === "connected",
+        capable: config.environment.capabilities.pullRequestFeed === true,
+        writeGranted: writable.has(environmentId),
+        managedPolicy: config.managedPolicy,
       };
     },
   );
@@ -75,9 +88,24 @@ export function PullRequestFeedRulesSection(props: {
       ? planMobileScopedSettingsClear(targets, ["pullRequestFeed"])
       : planMobileScopedSettingsPatch(targets, true, { pullRequestFeed: rule! });
     if (writes.length === 0) return;
-    setSentOver(presentationById);
+    const sending = targets.flatMap((target) =>
+      target.projectId === null
+        ? []
+        : [{ environmentId: target.environment.environmentId, projectId: target.projectId, rule }],
+    );
+    setSent(sending);
     void writeSettings(targets, writes).then((failed) => {
-      if (failed.length > 0) setSentOver(null);
+      // Read now: a push that arrived before this reply already answers its target.
+      const latest = registry.get(environmentServerConfigsAtom);
+      setSent((current) =>
+        current !== sending
+          ? current
+          : sending.flatMap((write) =>
+              failed.includes(write.environmentId)
+                ? []
+                : [{ ...write, repliedOver: latest.get(write.environmentId)?.settings }],
+            ),
+      );
     });
   };
 
