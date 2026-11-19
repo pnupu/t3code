@@ -109,7 +109,7 @@ export function usePullRequestFeed() {
     );
   };
 
-  // Like Settings' project scope, every writable copy gets the rule; a disconnected one warns.
+  // Like Settings' project scope: an offline copy is skipped and keeps its rule until written again.
   const ruleMembers = (project: { environmentId: EnvironmentId; projectId: ProjectId }) => {
     const repositoryKeyOf = (candidate: (typeof projects)[number] | undefined) =>
       candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
