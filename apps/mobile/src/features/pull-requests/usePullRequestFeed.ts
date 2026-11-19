@@ -89,8 +89,7 @@ export function usePullRequestFeed() {
         targets: new Map(environmentIds.map((id) => [id, {}])),
       }),
     );
-    void writeSettings(
-      [],
+    void writeSettings([], () =>
       environmentIds.map((environmentId) => ({
         environmentId,
         patch: { hiddenPullRequests: { [key]: url } },

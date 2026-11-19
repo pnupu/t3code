@@ -515,6 +515,10 @@
       "types": "./src/pullRequestFeed.ts",
       "default": "./src/pullRequestFeed.ts"
     },
+    "./settings-writer": {
+      "types": "./src/settingsWriter.ts",
+      "default": "./src/settingsWriter.ts"
+    },
     "./pull-request-project-filter": {
       "types": "./src/pullRequestProjectFilter.ts",
       "default": "./src/pullRequestProjectFilter.ts"
