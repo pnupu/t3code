@@ -49,7 +49,7 @@ export interface ThreadDetailsUsageInput {
 
 type UsageTone = "error" | "warning" | null;
 
-function limitTone(left: number): UsageTone {
+export function limitTone(left: number): UsageTone {
   if (left <= 10) return "error";
   if (left <= 20) return "warning";
   return null;
@@ -293,13 +293,15 @@ function PoolRow({ window, now }: { readonly window: LimitPoolWindow; readonly n
 }
 
 /** One label, hairline, and value row; the whole row opens the details tooltip. With `opensUsage` it links to the usage page. */
-function UsageRow({
+export function UsageRow({
   label,
   fill,
+  color,
   tone,
   tick = null,
   value,
   ariaValue = value,
+  ariaLabel,
   tooltip,
   muted = false,
   opensUsage = false,
@@ -307,18 +309,21 @@ function UsageRow({
   readonly label: string;
   /** Bar fill from 0 to 100. Null hides the bar. */
   readonly fill: number | null;
+  /** Fill color, such as a provider's; the tone then colors only the value. */
+  readonly color?: string;
   readonly tone: UsageTone;
   /** A marker on the bar, from 0 to 100. */
   readonly tick?: number | null;
   readonly value: string;
   readonly ariaValue?: string;
+  readonly ariaLabel?: string;
   readonly tooltip: ReactNode;
   readonly muted?: boolean;
   readonly opensUsage?: boolean;
 }) {
   const gt = useGT();
   const rowProps = {
-    "aria-label": gt("{label}: {value}", { label, value: ariaValue }),
+    "aria-label": ariaLabel ?? gt("{label}: {value}", { label, value: ariaValue }),
     className: cn(
       "col-span-3 grid h-6 grid-cols-subgrid items-center rounded-lg px-2.5 outline-none hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-black/[0.035] dark:hover:bg-white/[0.08] dark:data-popup-open:bg-white/[0.08]",
       opensUsage
@@ -342,15 +347,17 @@ function UsageRow({
               <span
                 className={cn(
                   "absolute inset-y-0 left-0 rounded-full",
-                  tone === "error"
-                    ? "bg-error"
-                    : tone === "warning"
-                      ? "bg-warning"
-                      : muted
-                        ? "bg-muted-foreground"
-                        : "bg-foreground/80",
+                  color !== undefined
+                    ? "bg-current"
+                    : tone === "error"
+                      ? "bg-error"
+                      : tone === "warning"
+                        ? "bg-warning"
+                        : muted
+                          ? "bg-muted-foreground"
+                          : "bg-foreground/80",
                 )}
-                style={{ width: `max(${fill}%, 6px)` }}
+                style={{ width: `max(${fill}%, 6px)`, color }}
               />
             ) : null}
             {tick !== null ? (
