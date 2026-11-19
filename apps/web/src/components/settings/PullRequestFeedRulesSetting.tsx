@@ -53,7 +53,7 @@ export function PullRequestFeedRulesSetting(props: {
                     <SelectValue>
                       {(value: string | null) =>
                         PULL_REQUEST_FEED_RULES.find((option) => option.value === value)?.label ??
-                        "Differs"
+                        (row.known ? "Differs" : "Unavailable")
                       }
                     </SelectValue>
                   </SelectTrigger>
