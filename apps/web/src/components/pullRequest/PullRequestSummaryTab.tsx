@@ -25,7 +25,14 @@ import {
 } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import { m, type MessageResolver } from "~/i18n/messages";
 
@@ -588,8 +595,8 @@ export function PullRequestSummaryTab({
   ];
 
   const openLink = useOpenLink(threadRef);
-  const openCheck = (url: string) => {
-    void openLink(url).catch((error: unknown) => {
+  const openCheck = (url: string, event: MouseEvent<HTMLElement>) => {
+    void openLink(url, { event }).catch((error: unknown) => {
       console.error(error);
       toastManager.add({ type: "error", title: m(msg("Unable to open check details")) });
     });
@@ -1069,7 +1076,7 @@ export function PullRequestSummaryTab({
                     <button
                       type="button"
                       disabled={!check.url}
-                      onClick={() => check.url && openCheck(check.url)}
+                      onClick={(event) => check.url && openCheck(check.url, event)}
                       className={cn(
                         "flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-2 text-left text-xs leading-5 [&>svg]:mt-0.5",
                         check.url ? "cursor-pointer" : "cursor-default",
