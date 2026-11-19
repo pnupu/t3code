@@ -149,8 +149,9 @@ type RepositoryProject = {
 };
 
 /**
- * A row's own rule plus the rules of every counted copy of its repository, matched on the same
- * repository key as `pullRequestRepositoryHidden`, so a row shows when any copy's rule allows it.
+ * The rules of every counted copy of a row's repository, matched on the same repository key as
+ * `pullRequestRepositoryHidden`, so a row shows when any copy's rule allows it. The row's own rule
+ * applies only when no copy counts.
  */
 export function pullRequestRepositoryRules<
   Project extends RepositoryProject,
@@ -174,7 +175,8 @@ export function pullRequestRepositoryRules<
   }
   return (entry) => {
     const key = keys.get(`${entry.environmentId} ${entry.projectId}`);
-    return [ownRuleOf(entry), ...(key === undefined ? [] : (rules.get(key) ?? []))];
+    const counted = key === undefined ? undefined : rules.get(key);
+    return counted ?? [ownRuleOf(entry)];
   };
 }
 
