@@ -7,6 +7,7 @@ import {
   pullRequestFeedRule,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
+  pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   AuthSettingsWriteScope,
@@ -75,9 +76,11 @@ export function usePullRequestFeed() {
     );
   // A repository one environment hides leaves every environment's copy, including carried rows.
   const repositoryHidden = pullRequestRepositoryHidden(projects, hidesRepository);
-  /** A copy's rule counts toward a row only where the row menu's rule write reaches it too. */
+  /** Every connected copy's rule counts, so the same settings give the same feed on any device. */
   const ruleCounts = (environmentId: EnvironmentId) =>
-    connected.has(environmentId) && canWrite(environmentId);
+    connected.has(environmentId) &&
+    environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
+      ?.environment.capabilities.pullRequestFeed === true;
   // Every environment that holds the link hides it, so all of them must be able to clear it.
   const holders = (url: string) =>
     environments.filter((environment) =>
@@ -109,18 +112,22 @@ export function usePullRequestFeed() {
     );
   };
 
-  // Like Settings' project scope: an offline copy is skipped and keeps its rule until written again.
-  const ruleMembers = (project: { environmentId: EnvironmentId; projectId: ProjectId }) => {
-    const repositoryKeyOf = (candidate: (typeof projects)[number] | undefined) =>
+  type ScopeProject = (typeof projects)[number];
+  // The writable copies in the list's scope; an offline one is skipped and keeps its rule.
+  const ruleMembers = (
+    project: { environmentId: EnvironmentId; projectId: ProjectId },
+    scope: ReadonlyArray<ScopeProject>,
+  ) => {
+    const repositoryKeyOf = (candidate: ScopeProject | undefined) =>
       candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
     const key = repositoryKeyOf(
-      projects.find(
+      scope.find(
         (candidate) =>
           candidate.environmentId === project.environmentId && candidate.id === project.projectId,
       ),
     );
     if (key) {
-      return projects.filter(
+      return scope.filter(
         (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
       );
     }
@@ -129,11 +136,7 @@ export function usePullRequestFeed() {
       : [];
   };
 
-  const setProjectRule = (
-    project: { environmentId: EnvironmentId; projectId: ProjectId },
-    rule: PullRequestFeedRule,
-  ) => {
-    const members = ruleMembers(project);
+  const setProjectRule = (members: ReturnType<typeof ruleMembers>, rule: PullRequestFeedRule) => {
     runPlan(environments, (current) =>
       planProjectOverridePatch(current, members, { pullRequestFeed: rule }),
     );
@@ -143,11 +146,19 @@ export function usePullRequestFeed() {
     entry: EnvironmentPullRequestEntry,
     openLabel: string,
     position: { readonly x: number; readonly y: number },
-    rules: ReadonlyArray<PullRequestFeedRule>,
+    scope: ReadonlyArray<ScopeProject>,
   ) => {
     const api = readLocalApi();
     if (!api) return;
     const isHidden = isPullRequestHidden(hidden, entry.url);
+    // The same scope as the list, so the checkmarks and the write cover the same copies.
+    const rules = pullRequestRepositoryRules(
+      scope,
+      (project) => ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+      (project) => ruleCounts(project.environmentId),
+      ruleFor,
+    )(entry);
+    const members = ruleMembers(entry, scope);
     const writable = canWrite(entry.environmentId);
     const items: ContextMenuItem<FeedMenuAction>[] = [
       { id: "copy-link", label: "Copy link", icon: "copy" },
@@ -166,7 +177,7 @@ export function usePullRequestFeed() {
       {
         id: "rule:all",
         label: `Feed for ${entry.projectTitle}`,
-        disabled: ruleMembers(entry).length === 0,
+        disabled: members.length === 0,
         children: PULL_REQUEST_FEED_RULES.map((option) => ({
           id: `rule:${option.value}` as const,
           label: option.label,
@@ -188,7 +199,7 @@ export function usePullRequestFeed() {
       unhide(entry.url);
     } else {
       const picked = PULL_REQUEST_FEED_RULES.find((option) => action === `rule:${option.value}`);
-      if (picked) setProjectRule(entry, picked.value);
+      if (picked) setProjectRule(members, picked.value);
     }
   };
 
