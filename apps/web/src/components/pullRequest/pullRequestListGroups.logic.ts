@@ -126,7 +126,7 @@ export function pullRequestGroups({
         viewers,
       );
     }
-    // Rows only the paged listings bring join the group their own author and requests give.
+    // Rows only the involved listing brings join the group their own author and requests give.
     const extra = narrow(involved) ?? [];
     const groupOfExtra = (entry: EnvironmentPullRequestEntry) =>
       pullRequestFeedGroup(entry, pullRequestEntryViewer(entry, viewers));

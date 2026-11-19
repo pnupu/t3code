@@ -411,16 +411,6 @@ function nextListCursor(
   return listCursorAt(previous, oldest.updatedAt, fetched, cursorAdvance, resumeAfter);
 }
 
-function retriesFrom(
-  cursor: ListCursor | undefined,
-  error: { readonly reason: string },
-): string | null {
-  if (cursor === undefined || (error.reason !== "failed" && error.reason !== "rate-limited")) {
-    return null;
-  }
-  return listCursorAt(cursor, cursor.updatedBefore, [], 0, cursor.resumeAfter);
-}
-
 function listCursorAt(
   previous: ListCursor | undefined,
   boundary: string,
@@ -1554,10 +1544,8 @@ export const make = Effect.gen(function* () {
                         : `${project.repository} could not be read. ${error.accessHint}`,
                   },
                 ],
-                // A continuation that failed for a passing reason offers its cursor again, so the
-                // reader can retry it; a denied or missing repository ends there.
-                truncated: retriesFrom(cursor, error) !== null,
-                nextCursor: retriesFrom(cursor, error),
+                truncated: false,
+                nextCursor: null,
               }),
             ),
           );
@@ -1573,7 +1561,6 @@ export const make = Effect.gen(function* () {
         if (
           input.filters === undefined ||
           cursor === null ||
-          batch.errors.length > 0 ||
           batch.entries.length >= limit ||
           reads >= FILTERED_LIST_READS
         ) {

@@ -36,7 +36,7 @@ import { usePullRequestListActions } from "./usePullRequestListActions";
 import { usePullRequestFeed } from "./usePullRequestFeed";
 import {
   isPullRequestHidden,
-  pullRequestFeedGroup,
+  pullRequestListedGroup,
   pullRequestFeedVisibility,
   pullRequestInvolvedMatcher,
   pullRequestRepositoryHidden,
@@ -91,6 +91,10 @@ function PullRequestListError(props: { readonly message: string }) {
     </Pressable>
   );
 }
+
+// lean: Involving me reads one page of each of its lists, the same 99 rows web reads, so older
+// involved pull requests stay hidden. Revisit if users need their older involved pull requests.
+const INVOLVED_LIST_LIMIT = 99;
 
 export function PullRequestsScreen(
   props: {
@@ -200,13 +204,23 @@ export function PullRequestsScreen(
       });
       return projectIds.length === 0
         ? []
-        : [{ ...target, input: { ...target.input, involvement: "involved" as const, projectIds } }];
+        : [
+            {
+              ...target,
+              input: {
+                ...target.input,
+                involvement: "involved" as const,
+                projectIds,
+                limit: INVOLVED_LIST_LIMIT,
+              },
+            },
+          ];
     });
   }, [mainAnswered, involvedProjectKey, targets]);
   const involvedList = usePullRequestList(involvedTargets);
   // As on web's partitions, the authored and review lists join the candidates: `involves:` leaves
   // out a pull request only waiting on the viewer's review, and a host without `listsInvolved`
-  // answers `involved` with nothing. Their rows are admitted by their own group.
+  // answers `involved` with nothing. Each reads one page, as the involved list does.
   const partitionTargets = useMemo(
     () =>
       (["authored", "reviewing"] as const).map((involvement) =>
@@ -241,14 +255,6 @@ export function PullRequestsScreen(
             ),
         },
   );
-  // The involved listing is a project's only source of Others rows, so it pages with the list.
-  const loadMore = (retry?: boolean) => {
-    void result.loadMore(retry);
-    // Only an explicit retry reruns a failed page; scrolling stops at its error.
-    for (const list of [involvedList, authoredList, reviewingList]) {
-      if (list.hasMore) void list.loadMore(retry);
-    }
-  };
   const connectedTargets = targets.filter((target) =>
     environments.some(
       (environment) =>
@@ -306,10 +312,17 @@ export function PullRequestsScreen(
       targets.some((target) => target.environmentId === project.environmentId),
     feed.ruleFor,
   );
+  const listedGroups = useMemo(
+    () => ({
+      authored: new Set(authoredList.entries.map((entry) => entry.url)),
+      reviewing: new Set(reviewingList.entries.map((entry) => entry.url)),
+    }),
+    [authoredList.entries, reviewingList.entries],
+  );
   const visibilities = entries.map((entry) =>
     pullRequestFeedVisibility(
       entry,
-      pullRequestFeedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`]),
+      pullRequestListedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`], listedGroups),
       {
         scopedToProject: Boolean(controls.projectId),
         involvement: controls.involvement,
@@ -439,7 +452,7 @@ export function PullRequestsScreen(
         estimatedItemSize={88}
         drawDistance={1_000}
         maintainVisibleContentPosition={result.continued ? maintainVisiblePosition : false}
-        onEndReached={() => loadMore()}
+        onEndReached={() => void result.loadMore()}
         onEndReachedThreshold={0.5}
         onViewableItemsChanged={result.onViewableItemsChanged}
         refreshControl={
@@ -508,43 +521,29 @@ export function PullRequestsScreen(
           </>
         }
         ListFooterComponent={
-          result.loadingMore ||
-          involvedList.loadingMore ||
-          authoredList.loadingMore ||
-          reviewingList.loadingMore ? (
+          result.loadingMore ? (
             <View className="items-center py-5">
               <AppActivityIndicator
                 colorClassName="accent-icon"
                 accessibilityLabel="Loading more pull requests"
               />
             </View>
-          ) : (result.loadMoreError ??
-            involvedList.loadMoreError ??
-            authoredList.loadMoreError ??
-            reviewingList.loadMoreError) ? (
+          ) : result.loadMoreError ? (
             <View className="items-center gap-2 px-8 py-4">
-              <Text className="text-xs text-foreground-muted">
-                {result.loadMoreError ??
-                  involvedList.loadMoreError ??
-                  authoredList.loadMoreError ??
-                  reviewingList.loadMoreError}
-              </Text>
+              <Text className="text-xs text-foreground-muted">{result.loadMoreError}</Text>
               <Button
                 label="Try again"
                 accessibilityLabel="Retry loading more pull requests"
-                onPress={() => loadMore(true)}
+                onPress={() => void result.loadMore(true)}
               />
             </View>
-          ) : result.hasMore ||
-            involvedList.hasMore ||
-            authoredList.hasMore ||
-            reviewingList.hasMore ? (
+          ) : result.hasMore ? (
             // A filtered page can be too short to scroll, which leaves nothing to reach the end of.
             <View className="items-center py-4">
               <Button
                 label="Load more"
                 accessibilityLabel="Load more pull requests"
-                onPress={() => loadMore()}
+                onPress={() => void result.loadMore()}
               />
             </View>
           ) : undefined

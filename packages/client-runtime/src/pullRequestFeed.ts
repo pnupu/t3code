@@ -56,6 +56,21 @@ export function pullRequestFeedGroup(
 }
 
 /**
+ * A row an authored or review-requested listing returned keeps that group even when its author
+ * login is not the viewer's: the host matched it another way, as GitCafe does by actor. The server
+ * already checks the rows of hosts that ignore those listings.
+ */
+export function pullRequestListedGroup(
+  entry: Parameters<typeof pullRequestFeedGroup>[0] & { readonly url: string },
+  viewer: string | null | undefined,
+  listed: { readonly authored: ReadonlySet<string>; readonly reviewing: ReadonlySet<string> },
+): PullRequestFeedGroup {
+  if (listed.authored.has(entry.url)) return "authored";
+  const own = pullRequestFeedGroup(entry, viewer);
+  return own === "others" && listed.reviewing.has(entry.url) ? "reviewRequested" : own;
+}
+
+/**
  * A narrowed involvement tab holds one group of that kind, whatever its key says. `involved` says
  * the host lists the viewer as taking part in an Others row, by a comment, mention, or assignment.
  */

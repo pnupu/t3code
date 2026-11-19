@@ -68,8 +68,7 @@ import { INVOLVEMENT_TABS, SORT_OPTIONS, STATE_TABS } from "./pullRequestListOpt
 import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
 import { usePullRequestFeed } from "./usePullRequestFeed";
-import { combinedReadState, mainReadState, pullRequestLoadMore } from "./pullRequestLoadMore.logic";
-import { usePagedHostList } from "./usePagedHostList";
+import { mainReadState, pullRequestLoadMore } from "./pullRequestLoadMore.logic";
 import {
   pullRequestInvolvedMatcher,
   pullRequestRepositoryRules,
@@ -470,8 +469,6 @@ export function PullRequestsPage() {
         authored: NO_LIST_TARGETS,
         reviewing: NO_LIST_TARGETS,
         involved: NO_LIST_TARGETS,
-        involvedAuthored: NO_LIST_TARGETS,
-        involvedReviewing: NO_LIST_TARGETS,
       };
     }
     const targetsFor = (involvement: PullRequestInvolvement, queries = environmentQueries) =>
@@ -490,44 +487,16 @@ export function PullRequestsPage() {
     return {
       authored: targetsFor("authored"),
       reviewing: targetsFor("reviewing"),
-      // A project on the rule pages these three on their own; only the involved listing decides
-      // membership, the other two bring rows the main list has not reached.
+      // lean: Involving me reads one page of the involved listing (on GitHub, PAGE_SIZE rows for
+      // each search chunk of repositories), so older ones stay hidden for a project on the rule.
+      // Revisit if users need their older involved pull requests.
       involved: targetsFor("involved", involvedQueries),
-      involvedAuthored: targetsFor("authored", involvedQueries),
-      involvedReviewing: targetsFor("reviewing", involvedQueries),
     };
   })();
   const authoredQuery = usePullRequestHostList(partitionTargets.authored);
   const reviewingQuery = usePullRequestHostList(partitionTargets.reviewing);
-  const involvedKey = `${filterKey}:${JSON.stringify(involvedQueries)}`;
-  const involvedListing = usePagedHostList(
-    partitionTargets.involved,
-    involvedKey,
-    turnRefreshToken,
-    PAGE_SIZE,
-  );
-  const involvedAuthoredListing = usePagedHostList(
-    partitionTargets.involvedAuthored,
-    involvedKey,
-    turnRefreshToken,
-    PAGE_SIZE,
-  );
-  const involvedReviewingListing = usePagedHostList(
-    partitionTargets.involvedReviewing,
-    involvedKey,
-    turnRefreshToken,
-    PAGE_SIZE,
-  );
-  const involvedListings = [involvedListing, involvedAuthoredListing, involvedReviewingListing];
-  const involvedHeld = partitionsWanted ? involvedListing.rows : null;
-  const involvedCandidates = (() => {
-    if (involvedHeld === null) return undefined;
-    const byUrl = new Map<string, EnvironmentPullRequestEntry>();
-    for (const listing of involvedListings) {
-      for (const entry of listing.rows?.entries ?? []) byUrl.set(entry.url, entry);
-    }
-    return [...byUrl.values()];
-  })();
+  const involvedQuery = usePullRequestHostList(partitionTargets.involved);
+  const involvedAnswer = partitionsWanted ? involvedQuery.data : null;
   const invalidate = useAtomCommand(pullRequestEnvironment.invalidate, { reportFailure: false });
   const [detailRefreshToken, setDetailRefreshToken] = useState(0);
   const [invalidating, setInvalidating] = useState(false);
@@ -732,15 +701,9 @@ export function PullRequestsPage() {
     canGrow: canContinue || pageSize < MAX_PAGE_SIZE,
     failed: listQuery.error !== null,
   });
-  const involvedReadState = partitionsWanted
-    ? combinedReadState(involvedListings.map((listing) => listing.state))
-    : null;
-  const loadMorePlan = pullRequestLoadMore(mainRead, involvedReadState);
+  const loadMorePlan = pullRequestLoadMore(mainRead);
   const loadMore = () => {
-    if (loadMorePlan.growInvolved) {
-      for (const listing of involvedListings) listing.advance();
-    }
-    if (!loadMorePlan.growMain) return;
+    if (!loadMorePlan.grow) return;
     // No environment can continue, so the failed reads are asked for again as they were.
     if (mainRead === "failed") {
       listQuery.refresh();
@@ -784,7 +747,6 @@ export function PullRequestsPage() {
   if (sentCursors !== null && page.turn !== turnRefreshToken) setPage(collapsedPage());
 
   const refreshList = (includeRelated = false, actedEnvironmentId?: EnvironmentId) => {
-    if (includeRelated) for (const listing of involvedListings) listing.refresh();
     const related = (
       includeRelated
         ? [
@@ -792,6 +754,7 @@ export function PullRequestsPage() {
             ...facetTargets,
             ...partitionTargets.authored,
             ...partitionTargets.reviewing,
+            ...partitionTargets.involved,
           ]
         : []
     ).filter(
@@ -846,25 +809,23 @@ export function PullRequestsPage() {
   );
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
-  const shownInvolved = usePendingListEntries(overlayInput, involvedCandidates);
+  const shownInvolved = usePendingListEntries(overlayInput, involvedAnswer?.entries);
   // A project's listing is ready once its environment answered without failing and the project
   // itself was read without error; until then its rows show as under the All rule.
-  // lean: a host that says it has more without a cursor ends its involved listing at the first
-  // page, so older Others rows of a project on the rule stay hidden there. Revisit if one does.
   const involved = pullRequestInvolvedMatcher(
-    involvedHeld === null
+    involvedAnswer == null
       ? null
       : {
-          entries: involvedHeld.entries,
+          entries: involvedAnswer.entries,
           ready: (entry: EnvironmentPullRequestEntry) =>
-            involvedHeld.answered.includes(entry.environmentId) &&
-            !involvedListing.failed.includes(entry.environmentId) &&
+            involvedQuery.answered.includes(entry.environmentId) &&
+            !involvedQuery.failed.includes(entry.environmentId) &&
             involvedQueries.some(
               (query) =>
                 query.environmentId === entry.environmentId &&
                 query.projectIds.some((id) => id === entry.projectId),
             ) &&
-            !involvedHeld.errors.some(
+            !involvedAnswer.errors.some(
               (error) =>
                 error.environmentId === entry.environmentId && error.projectId === entry.projectId,
             ),
@@ -913,7 +874,7 @@ export function PullRequestsPage() {
           },
     authored: partitionsWanted && authoredQuery.data !== null ? shownAuthored : undefined,
     reviewing: partitionsWanted && reviewingQuery.data !== null ? shownReviewing : undefined,
-    involved: involvedHeld === null ? undefined : shownInvolved,
+    involved: involvedAnswer == null ? undefined : shownInvolved,
     partitionsWanted,
     feed: {
       scopedToProject: scopedProjectId !== undefined,
@@ -1463,9 +1424,7 @@ export function PullRequestsPage() {
           {loadMorePlan.footer === "loading" ? (
             <span className="flex items-center gap-2">
               <Spinner aria-hidden size="sm" />
-              {sentCursors === null && involvedReadState !== "pending"
-                ? "Updating pull requests"
-                : "Loading more"}
+              {sentCursors === null ? "Updating pull requests" : "Loading more"}
             </span>
           ) : loadMorePlan.footer === "button" ? (
             <Button size="sm" variant="outline" onClick={loadMore} disabled={showingCarried}>

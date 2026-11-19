@@ -2702,34 +2702,6 @@ it.effect("keeps a host's own narrowing and checks it only where the host ignore
   }),
 );
 
-it.effect("offers a failed continuation's cursor again so it can be retried", () =>
-  Effect.gen(function* () {
-    const service = yield* makeService({
-      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
-      providers: [
-        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
-          getViewer: () => Effect.succeed("bilal"),
-          listChangeRequests: (input) =>
-            input.cursor === undefined
-              ? Effect.succeed({
-                  items: [changeRequest(1, "2026-07-03T00:00:00Z")],
-                  truncated: true,
-                  continues: true,
-                })
-              : Effect.fail(requestFailed),
-        }),
-      ],
-    });
-    const first = yield* service.list({ state: "open" });
-    const [key, cursor] = Object.entries(first.nextCursors)[0]!;
-
-    const failed = yield* service.list({ state: "open", cursors: { [key]: cursor } });
-
-    assert.lengthOf(failed.errors, 1);
-    assert.deepStrictEqual(failed.nextCursors, { [key]: cursor });
-  }),
-);
-
 it.effect("a listing narrowed to some projects is its own cache entry", () =>
   Effect.gen(function* () {
     const asked: ReadonlyArray<string>[] = [];

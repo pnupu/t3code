@@ -250,7 +250,9 @@ When the list shows all projects, each project adds pull requests by its **Pull 
 rule: **All pull requests**, **Involving me**, **Waiting on me** (your review is requested),
 **Authored by me**, or **Hidden**. **Involving me** suits a large repository: it shows the pull
 requests you opened or are asked to review, and on GitHub also the ones that assign you, mention
-you, or have your comments. Other hosts show only the first two. While you search, it shows
+you, or have your comments. Other hosts show only the first two. It shows your most recent
+involved pull requests (on GitHub, the newest 99 for each 100 repositories on a server); pick the
+project in the list's project filter to see all of its pull requests. While you search, it shows
 all of the project's pull requests. Set the default in Settings → Source control, and override it
 for a project with the project selector there. On web and desktop you can also right-click a pull
 request and choose a rule for its project. When the same repository is a project on several

@@ -19,6 +19,7 @@ import {
   pullRequestFeedRule,
   pullRequestFeedShows,
   pullRequestInvolvedMatcher,
+  pullRequestListedGroup,
   type PullRequestFeedGroup,
 } from "./pullRequestFeed.ts";
 
@@ -80,6 +81,14 @@ describe("pull request feed rules", () => {
     expect(pullRequestFeedGroup(entry, "me")).toBe("authored");
     expect(pullRequestFeedGroup(entry, "someone")).toBe("reviewRequested");
     expect(pullRequestFeedGroup({ ...entry, viewerReviewRequested: false }, null)).toBe("others");
+    // GitCafe lists a synced pull request as authored by actor, under a login not the viewer's.
+    const synced = {
+      url: "https://h/a/1",
+      author: { login: "github-me" },
+      viewerReviewRequested: false,
+    };
+    const listed = { authored: new Set([synced.url]), reviewing: new Set<string>() };
+    expect(pullRequestListedGroup(synced, "cafe-me", listed)).toBe("authored");
   });
 
   it("applies project rules to the combined feed and hides pull requests in every view", () => {
