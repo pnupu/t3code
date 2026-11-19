@@ -1106,10 +1106,28 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["links default browser in-app browser external open"],
   },
   {
+    id: "browser-mod-click-link-target",
+    title: "Cmd/Ctrl-click links",
+    to: "/settings/browser",
+    searchTerms: ["ctrl click modifier links in-app browser this device local open"],
+  },
+  {
+    id: "browser-mod-shift-click-link-target",
+    title: "Cmd/Ctrl+Shift-click links",
+    to: "/settings/browser",
+    searchTerms: ["ctrl shift click modifier links remote environment machine server browser open"],
+  },
+  {
     id: "browser-search-engine",
     title: "Search engine",
     to: "/settings/browser",
     searchTerms: ["address bar duckduckgo google bing brave kagi ecosia custom url"],
+  },
+  {
+    id: "hidden-pull-requests",
+    title: "Hidden pull requests",
+    to: "/settings/diffs",
+    searchTerms: ["pr feed list hide unhide show excluded"],
   },
   {
     id: "pull-request-links-open-in-app",
@@ -1147,6 +1165,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/source-control",
     scope: "project-defaults",
     searchTerms: ["pull request merge squash rebase last selected"],
+  },
+  {
+    id: "pull-request-feed",
+    title: "Pull request feed",
+    to: "/settings/source-control",
+    scope: "project-defaults",
+    searchTerms: ["pull requests list feed authored waiting on me review requested hide exclude"],
   },
   {
     id: "source-control",

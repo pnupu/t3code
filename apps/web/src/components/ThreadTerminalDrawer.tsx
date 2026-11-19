@@ -666,8 +666,8 @@ function TerminalSessionViewport({
     },
   );
   const openLinkInPreview = useEffectEvent(
-    (url: string, forceBrowser: boolean, fallbackToBrowser: () => void) =>
-      openTerminalLinkInPreview({ url, threadRef, openPreview, fallbackToBrowser, forceBrowser }),
+    (url: string, event: MouseEvent, fallbackToBrowser: () => void) =>
+      openTerminalLinkInPreview({ url, threadRef, openPreview, fallbackToBrowser, event }),
   );
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- sets the terminal input's readOnly from the operate grant and consumes a pending focus request
@@ -1066,17 +1066,15 @@ function TerminalSessionViewport({
             fallbackToBrowser();
             return;
           }
-          void openLinkInPreview(text, event.metaKey || event.ctrlKey, fallbackToBrowser).catch(
-            (error: unknown) => {
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Unable to open link",
-                  description: error instanceof Error ? error.message : "An error occurred.",
-                }),
-              );
-            },
-          );
+          void openLinkInPreview(text, event, fallbackToBrowser).catch((error: unknown) => {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Unable to open link",
+                description: error instanceof Error ? error.message : "An error occurred.",
+              }),
+            );
+          });
           return;
         }
         const target = resolveTerminalLinkTarget(text, cwd, readHostname());

@@ -67,6 +67,8 @@ const UNREACHABLE_PHASES: ReadonlySet<EnvironmentConnectionPhase> = new Set([
 export function usePullRequestScope(
   search: PullRequestsSearch,
   hostAvailability: PullRequestHostAvailability,
+  /** Projects whose `hidden` feed rule leaves their repository out of every query. */
+  hidesRepository: (project: { environmentId: EnvironmentId; id: ProjectId }) => boolean,
 ) {
   const { environments } = useEnvironments();
   const allProjects = useProjects();
@@ -141,7 +143,13 @@ export function usePullRequestScope(
   }> => {
     const plain = queryEnvironmentIds.map((environmentId) => ({ environmentId }));
     if (!projectsKnown || scopedProjectId !== undefined) return plain;
-    return pullRequestProjectQueries(projects, queryEnvironmentIds, availability, unreachable);
+    return pullRequestProjectQueries(
+      projects,
+      queryEnvironmentIds,
+      availability,
+      unreachable,
+      hidesRepository,
+    );
   };
   const environmentQueries = queriesFor(hostAvailability);
   // What the page reads once a refresh forgets host reads; refresh must refetch these too.

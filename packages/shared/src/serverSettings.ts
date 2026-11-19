@@ -235,6 +235,9 @@ function mergeModelSelectionOptionsById(input: {
   return [...merged.entries()].map(([id, value]) => ({ id, value }));
 }
 
+const lowercaseKeys = <Value>(record: Readonly<Record<string, Value>>) =>
+  Object.fromEntries(Object.entries(record).map(([key, value]) => [key.toLowerCase(), value]));
+
 function mergeSettingsEntries<Value>(
   current: Readonly<Record<string, Value>>,
   patch: Readonly<Record<string, Value | null>>,
@@ -407,6 +410,7 @@ export function applyServerSettingsPatch(
     sourceControlHosts: sourceControlHostsPatch,
     usagePriceOverrides: usagePriceOverridesPatch,
     usageModelAliases: usageModelAliasesPatch,
+    hiddenPullRequests: hiddenPullRequestsPatch,
     // Entry replacement: deepMerge would keep keys the client meant to clear.
     projectSettingsOverrides: projectSettingsOverridesPatch,
     projectAgentBrowserAccessOverrides: _legacyBrowserAccess,
@@ -639,6 +643,16 @@ export function applyServerSettingsPatch(
           usageModelAliases: mergeSettingsEntries(
             current.usageModelAliases,
             usageModelAliasesPatch,
+          ),
+        }
+      : {}),
+    // lean: the record holds only hidden links, unbounded until users hide thousands of them.
+    ...(hiddenPullRequestsPatch !== undefined
+      ? {
+          // Keys are lowercased on both sides, so any spelling of a stored link can be cleared.
+          hiddenPullRequests: mergeSettingsEntries(
+            lowercaseKeys(current.hiddenPullRequests),
+            lowercaseKeys(hiddenPullRequestsPatch),
           ),
         }
       : {}),

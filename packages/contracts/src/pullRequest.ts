@@ -63,6 +63,23 @@ export const PullRequestMergeMethod = Schema.Literals([
 ]);
 export type PullRequestMergeMethod = typeof PullRequestMergeMethod.Type;
 
+/** Which of a project's pull requests the combined Pull Requests feed shows. */
+export const PullRequestFeedRule = Schema.Literals(["all", "reviewing", "authored", "hidden"]);
+export type PullRequestFeedRule = typeof PullRequestFeedRule.Type;
+
+const HiddenPullRequestUrl = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048));
+/**
+ * Pull requests hidden from the feed: the lowercased URL maps to the URL as the user hid it. A
+ * record, not a list, so each hide or unhide patches one key and writers cannot erase each other.
+ */
+export const HiddenPullRequests = Schema.Record(HiddenPullRequestUrl, HiddenPullRequestUrl);
+export type HiddenPullRequests = typeof HiddenPullRequests.Type;
+/** A URL hides that link, `null` shows it again. */
+export const HiddenPullRequestsPatch = Schema.Record(
+  HiddenPullRequestUrl,
+  Schema.NullOr(HiddenPullRequestUrl),
+);
+
 export const PullRequestAction = Schema.Literals([
   "merge",
   "ready",

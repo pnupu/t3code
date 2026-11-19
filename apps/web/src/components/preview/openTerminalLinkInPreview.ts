@@ -3,9 +3,14 @@ import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime"
 import * as Schema from "effect/Schema";
 
 import { resolveBrowserDefaults } from "~/browser/browserDefaults";
-import { isWebUrl, resolveBrowserLinkTargetPreference } from "~/browser/browserLinkTarget";
+import {
+  canOpenLinkIn,
+  type LinkClickModifiers,
+  previewRuntimeForLinkTarget,
+  resolveLinkTarget,
+  resolveLinkTargetSettings,
+} from "~/browser/browserLinkTarget";
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
-import { isPreviewAvailableFor, previewRuntimeFor } from "~/browser/previewRuntime";
 import { recordVisitForThread } from "~/browserHistoryStore";
 import { applyPreviewServerSnapshot } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -31,20 +36,20 @@ interface OpenTerminalLinkInPreviewInput<E> {
   readonly threadRef: ScopedThreadRef;
   readonly openPreview: OpenPreviewMutation<E>;
   readonly fallbackToBrowser: () => void;
-  readonly forceBrowser: boolean;
+  readonly event: LinkClickModifiers;
 }
 
 export async function openTerminalLinkInPreview<E>(
   input: OpenTerminalLinkInPreviewInput<E>,
 ): Promise<void> {
-  const supportsPreview =
-    !input.forceBrowser &&
-    isWebUrl(input.url) &&
-    isPreviewAvailableFor(input.threadRef.environmentId) &&
-    input.threadRef.threadId.length > 0 &&
-    (await resolveBrowserLinkTargetPreference()) === "app";
-
-  if (!supportsPreview) {
+  const target = resolveLinkTarget({
+    url: input.url,
+    event: input.event,
+    settings: await resolveLinkTargetSettings(),
+    canOpenIn: (inAppTarget) => canOpenLinkIn(input.threadRef, inAppTarget),
+  });
+  const runtime = target === "system" ? null : previewRuntimeForLinkTarget(input.threadRef, target);
+  if (runtime === null) {
     input.fallbackToBrowser();
     return;
   }
@@ -56,7 +61,6 @@ export async function openTerminalLinkInPreview<E>(
   };
 
   const defaults = await resolveBrowserDefaults();
-  const runtime = previewRuntimeFor(input.threadRef.environmentId);
   const result = await input.openPreview({
     environmentId: input.threadRef.environmentId,
     input: {

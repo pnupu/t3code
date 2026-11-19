@@ -8,7 +8,7 @@ import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { selectEnvironmentQueryData } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { EnvironmentId, ProjectId, PullRequestRef } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId, PullRequestRef, ScopedThreadRef } from "@t3tools/contracts";
 import {
   ArrowUpRightIcon,
   EyeIcon,
@@ -99,6 +99,7 @@ export function ThreadDetailsPrRow({
   onActed,
   onStopWatching,
   composerTarget,
+  threadRef,
 }: {
   environmentId: EnvironmentId;
   pr: ThreadPr;
@@ -113,6 +114,8 @@ export function ThreadDetailsPrRow({
   onStopWatching?: (() => void) | undefined;
   /** Fix and Resolve write here instead of checking the pull request out in a new thread. */
   composerTarget?: ComposerThreadTarget | undefined;
+  /** The thread whose browser check links can open in. */
+  threadRef?: ScopedThreadRef | undefined;
 }) {
   const serverConfigs = useServerConfigs();
   const supportsPullRequests = serverConfigs.get(environmentId) !== undefined;
@@ -482,6 +485,7 @@ export function ThreadDetailsPrRow({
                 checksState={checksRollup}
                 checks={detail.checks}
                 variant="count"
+                threadRef={threadRef ?? null}
                 render={<ThreadDetailsControl part="meta" className="min-w-0 shrink" />}
               />
             ) : null}

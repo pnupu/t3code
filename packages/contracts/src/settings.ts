@@ -53,7 +53,12 @@ import {
   ProviderInstanceId,
   ProviderDriverKind,
 } from "./providerInstance.ts";
-import { PullRequestMergeMethod } from "./pullRequest.ts";
+import {
+  HiddenPullRequests,
+  HiddenPullRequestsPatch,
+  PullRequestFeedRule,
+  PullRequestMergeMethod,
+} from "./pullRequest.ts";
 import {
   CloudSpeechModelId,
   SpeechAcceleration,
@@ -315,6 +320,11 @@ export {
 export const BrowserLinkTarget = Schema.Literals(["system", "app"]);
 export type BrowserLinkTarget = typeof BrowserLinkTarget.Type;
 export const DEFAULT_BROWSER_LINK_TARGET: BrowserLinkTarget = "system";
+/** Where a modified link click opens: "local" is this client's browser, "environment" the thread's machine. */
+export const BrowserModifiedLinkTarget = Schema.Literals(["system", "local", "environment"]);
+export type BrowserModifiedLinkTarget = typeof BrowserModifiedLinkTarget.Type;
+export const DEFAULT_BROWSER_MOD_CLICK_LINK_TARGET: BrowserModifiedLinkTarget = "local";
+export const DEFAULT_BROWSER_MOD_SHIFT_CLICK_LINK_TARGET: BrowserModifiedLinkTarget = "environment";
 /**
  * What the address bar searches with when the input is not an address.
  * "custom" uses `browserCustomSearchUrl`, a template with `%s` for the query.
@@ -442,6 +452,12 @@ export const ClientSettingsSchema = Schema.Struct({
 
   browserLinkTarget: BrowserLinkTarget.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_LINK_TARGET)),
+  ),
+  browserModClickLinkTarget: BrowserModifiedLinkTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_MOD_CLICK_LINK_TARGET)),
+  ),
+  browserModShiftClickLinkTarget: BrowserModifiedLinkTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_MOD_SHIFT_CLICK_LINK_TARGET)),
   ),
 
   browserSearchEngine: BrowserSearchEngine.pipe(
@@ -1191,6 +1207,7 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "branchNamePrefix",
   "branchNameInstructions",
   "pullRequestMergeMethod",
+  "pullRequestFeed",
   "sidebarAutoSettleOnMerge",
   "sidebarAutoSettleAfterDays",
   "sidebarAutoSettleKeepPullRequests",
@@ -1229,6 +1246,7 @@ export const ProjectSettingsOverrides = Schema.Struct({
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
+  pullRequestFeed: Schema.optionalKey(PullRequestFeedRule),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
@@ -1559,6 +1577,8 @@ export const ServerSettings = Schema.Struct({
   pullRequestMergeMethod: Schema.NullOr(PullRequestMergeMethod).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  pullRequestFeed: PullRequestFeedRule.pipe(Schema.withDecodingDefault(Effect.succeed("all"))),
+  hiddenPullRequests: HiddenPullRequests.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 
   // Schema.Unknown preserves unknown-driver configs across versions; see providerInstance.ts.
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
@@ -1947,6 +1967,8 @@ export const ServerSettingsPatch = Schema.Struct({
   reviewGuideModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   reviewGuideInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
+  pullRequestFeed: Schema.optionalKey(PullRequestFeedRule),
+  hiddenPullRequests: Schema.optionalKey(HiddenPullRequestsPatch),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
@@ -2049,6 +2071,8 @@ export const ClientSettingsPatch = Schema.Struct({
   browserRecordingShowKeyPresses: Schema.optionalKey(Schema.Boolean),
   browserRecordingShowMousePresses: Schema.optionalKey(Schema.Boolean),
   browserLinkTarget: Schema.optionalKey(BrowserLinkTarget),
+  browserModClickLinkTarget: Schema.optionalKey(BrowserModifiedLinkTarget),
+  browserModShiftClickLinkTarget: Schema.optionalKey(BrowserModifiedLinkTarget),
   browserSearchEngine: Schema.optionalKey(BrowserSearchEngine),
   browserCustomSearchUrl: Schema.optionalKey(BrowserCustomSearchUrl),
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),

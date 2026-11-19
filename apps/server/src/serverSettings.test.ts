@@ -219,6 +219,28 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       }),
     ).pipe(Effect.provide(layerServerSettings())),
   );
+  it.effect("hides and unhides one pull request per patch without dropping the others", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const a = "https://github.com/x/a/pull/1";
+        const b = "https://github.com/x/b/pull/2";
+        yield* service.updateSettings({ hiddenPullRequests: { [a]: a } });
+        const upper = b.toUpperCase();
+        const both = yield* service.updateSettings({ hiddenPullRequests: { [upper]: upper } });
+        assert.deepEqual(both.hiddenPullRequests, { [a]: a, [b]: upper });
+        const unhidden = yield* service.updateSettings({ hiddenPullRequests: { [a]: null } });
+        assert.deepEqual(unhidden.hiddenPullRequests, { [b]: upper });
+        assert.deepEqual(
+          (yield* decodeServerSettingsJson(yield* fs.readFileString(config.settingsPath)))
+            .hiddenPullRequests,
+          { [b]: upper },
+        );
+      }),
+    ).pipe(Effect.provide(layerServerSettings())),
+  );
   it.effect("migrates saved token delivery to paragraph buffering without resetting settings", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;

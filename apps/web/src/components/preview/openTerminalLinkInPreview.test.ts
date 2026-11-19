@@ -4,7 +4,6 @@ import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
-import * as previewRuntime from "~/browser/previewRuntime";
 import { openTerminalLinkInPreview } from "./openTerminalLinkInPreview";
 
 vi.mock("~/previewStateStore", () => ({
@@ -27,12 +26,14 @@ vi.mock("~/browser/browserDefaults", () => ({
 }));
 
 const linkTargetMocks = vi.hoisted(() => ({
-  preference: vi.fn<() => "system" | "app">(),
+  runtime: vi.fn<() => "server" | "desktop" | undefined>(),
 }));
 
 vi.mock("~/browser/browserLinkTarget", () => ({
-  resolveBrowserLinkTargetPreference: async () => linkTargetMocks.preference(),
-  isWebUrl: (url: string) => /^https?:/u.test(url),
+  resolveLinkTargetSettings: async () => ({}),
+  resolveLinkTarget: () => "app",
+  canOpenLinkIn: () => true,
+  previewRuntimeForLinkTarget: () => linkTargetMocks.runtime(),
 }));
 
 const hydratedDefaults = {
@@ -50,7 +51,7 @@ const threadRef = {
 beforeEach(() => {
   browserDefaultsMocks.resolve.mockReset();
   browserDefaultsMocks.resolve.mockResolvedValue(hydratedDefaults);
-  linkTargetMocks.preference.mockReturnValue("app");
+  linkTargetMocks.runtime.mockReturnValue(undefined);
 });
 
 afterEach(() => {
@@ -67,7 +68,7 @@ describe("openTerminalLinkInPreview", () => {
       threadRef,
       openPreview: async () => AsyncResult.failure(Cause.interrupt()),
       fallbackToBrowser,
-      forceBrowser: false,
+      event: { metaKey: false, ctrlKey: false },
     });
 
     expect(reportError).not.toHaveBeenCalled();
@@ -75,7 +76,7 @@ describe("openTerminalLinkInPreview", () => {
   });
 
   it("opens a server tab with the default zoom and appearance", async () => {
-    vi.spyOn(previewRuntime, "previewRuntimeFor").mockReturnValue("server");
+    linkTargetMocks.runtime.mockReturnValue("server");
     const openPreview = vi.fn<OpenPreviewMutation>(async () =>
       AsyncResult.failure(Cause.interrupt()),
     );
@@ -85,7 +86,7 @@ describe("openTerminalLinkInPreview", () => {
       threadRef,
       openPreview,
       fallbackToBrowser: vi.fn(),
-      forceBrowser: false,
+      event: { metaKey: false, ctrlKey: false },
     });
 
     expect(openPreview).toHaveBeenCalledExactlyOnceWith({
