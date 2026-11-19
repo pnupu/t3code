@@ -44,7 +44,6 @@ describe("pull request feed rules", () => {
     ["involved", "others", "all", false],
     // The host's involved listing holds the row: a comment, mention, or assignment.
     ["involved", "others", "all", true, true],
-    ["involved", "others", "involved", true],
     ["involved", "others", "authored", true],
   ])("%s shows a %s row under %s: %s", (rule, group, involvement, shown, involved) => {
     expect(pullRequestFeedShows(rule, group, involvement, involved)).toBe(shown);

@@ -77,7 +77,7 @@ export function pullRequestFeedShows(
     case "hidden":
       return false;
     case "involved":
-      return kind !== "others" || involved || involvement === "involved";
+      return kind !== "others" || involved;
     case "authored":
       return kind === "authored";
     case "reviewing":

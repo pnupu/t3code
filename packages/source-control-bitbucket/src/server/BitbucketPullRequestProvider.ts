@@ -175,6 +175,7 @@ export const make = Effect.gen(function* () {
     servesHost,
     unavailableRequirement: UNAVAILABLE_REQUIREMENT,
     readsPublicHostWithoutCheckout: true,
+    ignoresInvolvement: ["authored", "reviewing"],
 
     getViewer: () => api.getViewer().pipe(Effect.mapError(fail("getViewer"))),
 

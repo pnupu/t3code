@@ -2668,11 +2668,65 @@ it.effect("reads `involved` only from a host that narrows it", () =>
 
       assert.deepStrictEqual(asked, listsInvolved ? ["involved"] : []);
       assert.strictEqual(result.entries.length, listsInvolved ? 1 : 0);
-
-      // A host that ignores `authored` sends every row; only GitHub's answer is trusted as sent.
-      const authored = yield* service.list({ state: "open", involvement: "authored" });
-      assert.strictEqual(authored.entries.length, listsInvolved ? 1 : 0);
     }
+  }),
+);
+
+it.effect("keeps a host's own narrowing and checks it only where the host ignores it", () =>
+  Effect.gen(function* () {
+    // `octocat` wrote the row, not the viewer: only a host that ignores `authored` drops it, and a
+    // host that matched it another way, as GitCafe does by actor, keeps it.
+    for (const ignores of [false, true]) {
+      const service = yield* makeService({
+        projects: [
+          project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        ],
+        providers: [
+          fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+            ...(ignores ? { ignoresInvolvement: ["authored", "reviewing"] as const } : {}),
+            getViewer: () => Effect.succeed("bilal"),
+            listChangeRequests: () =>
+              Effect.succeed({
+                items: [changeRequest(1, "2026-07-03T00:00:00Z")],
+                truncated: false,
+                continues: true,
+              }),
+          }),
+        ],
+      });
+
+      const authored = yield* service.list({ state: "open", involvement: "authored" });
+
+      assert.strictEqual(authored.entries.length, ignores ? 0 : 1);
+    }
+  }),
+);
+
+it.effect("offers a failed continuation's cursor again so it can be retried", () =>
+  Effect.gen(function* () {
+    const service = yield* makeService({
+      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
+      providers: [
+        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+          getViewer: () => Effect.succeed("bilal"),
+          listChangeRequests: (input) =>
+            input.cursor === undefined
+              ? Effect.succeed({
+                  items: [changeRequest(1, "2026-07-03T00:00:00Z")],
+                  truncated: true,
+                  continues: true,
+                })
+              : Effect.fail(requestFailed),
+        }),
+      ],
+    });
+    const first = yield* service.list({ state: "open" });
+    const [key, cursor] = Object.entries(first.nextCursors)[0]!;
+
+    const failed = yield* service.list({ state: "open", cursors: { [key]: cursor } });
+
+    assert.lengthOf(failed.errors, 1);
+    assert.deepStrictEqual(failed.nextCursors, { [key]: cursor });
   }),
 );
 

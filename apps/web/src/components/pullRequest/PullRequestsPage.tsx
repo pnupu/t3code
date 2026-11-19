@@ -68,11 +68,7 @@ import { INVOLVEMENT_TABS, SORT_OPTIONS, STATE_TABS } from "./pullRequestListOpt
 import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
 import { usePullRequestFeed } from "./usePullRequestFeed";
-import {
-  combinedReadState,
-  pullRequestLoadMore,
-  type PullRequestReadState,
-} from "./pullRequestLoadMore.logic";
+import { combinedReadState, mainReadState, pullRequestLoadMore } from "./pullRequestLoadMore.logic";
 import { usePagedHostList } from "./usePagedHostList";
 import {
   pullRequestInvolvedMatcher,
@@ -509,21 +505,18 @@ export function PullRequestsPage() {
     involvedKey,
     turnRefreshToken,
     PAGE_SIZE,
-    MAX_PAGE_SIZE,
   );
   const involvedAuthoredListing = usePagedHostList(
     partitionTargets.involvedAuthored,
     involvedKey,
     turnRefreshToken,
     PAGE_SIZE,
-    MAX_PAGE_SIZE,
   );
   const involvedReviewingListing = usePagedHostList(
     partitionTargets.involvedReviewing,
     involvedKey,
     turnRefreshToken,
     PAGE_SIZE,
-    MAX_PAGE_SIZE,
   );
   const involvedListings = [involvedListing, involvedAuthoredListing, involvedReviewingListing];
   const involvedHeld = partitionsWanted ? involvedListing.rows : null;
@@ -732,16 +725,13 @@ export function PullRequestsPage() {
     (environmentId) => nextCursors[environmentId] === undefined,
   );
   const canContinue = !showingCarried && Object.keys(nextCursors).length > 0;
-  const mainRead: PullRequestReadState =
-    listData?.truncated !== true
-      ? "complete"
-      : loadingMore
-        ? "pending"
-        : !(canContinue || pageSize < MAX_PAGE_SIZE)
-          ? "capped"
-          : listQuery.error !== null
-            ? "failed"
-            : "truncated";
+  const mainRead = mainReadState({
+    truncated: listData?.truncated === true,
+    loading: loadingMore,
+    canContinue,
+    canGrow: canContinue || pageSize < MAX_PAGE_SIZE,
+    failed: listQuery.error !== null,
+  });
   const involvedReadState = partitionsWanted
     ? combinedReadState(involvedListings.map((listing) => listing.state))
     : null;
@@ -751,7 +741,7 @@ export function PullRequestsPage() {
       for (const listing of involvedListings) listing.advance();
     }
     if (!loadMorePlan.growMain) return;
-    // The failed page's cursors are the ones held, so asking with them again needs a refresh.
+    // No environment can continue, so the failed reads are asked for again as they were.
     if (mainRead === "failed") {
       listQuery.refresh();
       return;

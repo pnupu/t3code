@@ -411,6 +411,16 @@ function nextListCursor(
   return listCursorAt(previous, oldest.updatedAt, fetched, cursorAdvance, resumeAfter);
 }
 
+function retriesFrom(
+  cursor: ListCursor | undefined,
+  error: { readonly reason: string },
+): string | null {
+  if (cursor === undefined || (error.reason !== "failed" && error.reason !== "rate-limited")) {
+    return null;
+  }
+  return listCursorAt(cursor, cursor.updatedBefore, [], 0, cursor.resumeAfter);
+}
+
 function listCursorAt(
   previous: ListCursor | undefined,
   boundary: string,
@@ -547,6 +557,7 @@ function withRateLimitBackoff(
       : { readsPublicHostWithoutCheckout: api.readsPublicHostWithoutCheckout }),
     ...(api.batchesReads === undefined ? {} : { batchesReads: api.batchesReads }),
     ...(api.listsInvolved === undefined ? {} : { listsInvolved: api.listsInvolved }),
+    ...(api.ignoresInvolvement === undefined ? {} : { ignoresInvolvement: api.ignoresInvolvement }),
     getViewer:
       options?.viewerAllowsPause === true
         ? interactive("getViewer", api.getViewer)
@@ -1441,19 +1452,18 @@ export const make = Effect.gen(function* () {
     // rows from its authored and review-requested partitions.
     const skipsInvolved = (project: SupportedProject) =>
       involvement === "involved" && project.api.listsInvolved !== true;
-    // Some hosts ignore `authored` and `reviewing` and send every row, so outside GitHub a row
-    // stays only when its own author or review requests say it involves the viewer.
+    // A host that ignores `authored` or `reviewing` sends every row, so there a row stays only
+    // when its own author or review requests involve the viewer. Other hosts' rows stay as sent.
     const keepsInvolvement = (
       project: SupportedProject,
       item: ProviderChangeRequest,
       viewer: string,
     ) =>
-      project.api.listsInvolved === true ||
-      (involvement === "authored"
+      involvement === "authored" && project.api.ignoresInvolvement?.includes("authored")
         ? item.author?.login.toLowerCase() === viewer.toLowerCase()
-        : involvement === "reviewing"
+        : involvement === "reviewing" && project.api.ignoresInvolvement?.includes("reviewing")
           ? item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer.toLowerCase())
-          : true);
+          : true;
 
     const readSlice = (
       project: SupportedProject,
@@ -1544,8 +1554,10 @@ export const make = Effect.gen(function* () {
                         : `${project.repository} could not be read. ${error.accessHint}`,
                   },
                 ],
-                truncated: false,
-                nextCursor: null,
+                // A continuation that failed for a passing reason offers its cursor again, so the
+                // reader can retry it; a denied or missing repository ends there.
+                truncated: retriesFrom(cursor, error) !== null,
+                nextCursor: retriesFrom(cursor, error),
               }),
             ),
           );
@@ -1561,6 +1573,7 @@ export const make = Effect.gen(function* () {
         if (
           input.filters === undefined ||
           cursor === null ||
+          batch.errors.length > 0 ||
           batch.entries.length >= limit ||
           reads >= FILTERED_LIST_READS
         ) {

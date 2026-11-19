@@ -342,6 +342,8 @@ export interface PullRequestProviderApi {
    * `involved` with nothing; clients use the authored and review-requested reads instead.
    */
   readonly listsInvolved?: boolean;
+  /** Listings it answers with every row although the caller asked for them narrowed. */
+  readonly ignoresInvolvement?: ReadonlyArray<"authored" | "reviewing">;
   /**
    * Absent means every host detected as this kind is read. A host it refuses is listed as one that
    * cannot be browsed here, and nothing is sent for it.

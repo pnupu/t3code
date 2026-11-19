@@ -126,11 +126,15 @@ export function pullRequestGroups({
         viewers,
       );
     }
+    // Rows only the paged listings bring join the group their own author and requests give.
+    const extra = narrow(involved) ?? [];
+    const groupOfExtra = (entry: EnvironmentPullRequestEntry) =>
+      pullRequestFeedGroup(entry, pullRequestEntryViewer(entry, viewers));
     return partitionPullRequestsWithPriority(
       searched,
-      narrowedAuthored,
-      narrowedReviewing,
-      narrow(involved),
+      [...narrowedAuthored, ...extra.filter((entry) => groupOfExtra(entry) === "authored")],
+      [...narrowedReviewing, ...extra.filter((entry) => groupOfExtra(entry) === "reviewRequested")],
+      extra.filter((entry) => groupOfExtra(entry) === "others"),
     );
   })();
 
