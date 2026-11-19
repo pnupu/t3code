@@ -1013,7 +1013,8 @@ describe("listChangeRequestsAcross", () => {
           limit: 50,
         });
       expect((yield* read("acme/web")).truncated).toBe(false);
-      expect((yield* read("acme/renamed")).truncated).toBe(true);
+      // The caller files a failed read as one it cannot rule on.
+      expect((yield* Effect.flip(read("acme/renamed"))).reason).toBe("failed");
     }),
   );
 

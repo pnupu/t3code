@@ -2668,7 +2668,7 @@ it.effect("reads `involved` only from a host that narrows it, and says which hos
 
       assert.deepStrictEqual(asked, listsInvolved ? ["involved"] : []);
       assert.strictEqual(result.entries.length, listsInvolved ? 1 : 0);
-      assert.strictEqual(result.providers[0]?.listsInvolved, listsInvolved ? true : undefined);
+      assert.strictEqual(result.providers[0]?.listsInvolved, listsInvolved);
     }
   }),
 );

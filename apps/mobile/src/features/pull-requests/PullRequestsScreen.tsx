@@ -204,17 +204,18 @@ export function PullRequestsScreen(
     });
   }, [mainAnswered, involvedProjectKey, targets]);
   const involvedList = usePullRequestList(involvedTargets);
-  // `involves:` leaves out a pull request only waiting on the viewer's review, so the review list
-  // joins the candidates too; its rows are admitted by their own group.
-  const reviewingTargets = useMemo(
+  // As on web's partitions, the authored and review lists join the candidates: `involves:` leaves
+  // out a pull request only waiting on the viewer's review, and a host without `listsInvolved`
+  // answers `involved` with nothing. Their rows are admitted by their own group.
+  const partitionTargets = useMemo(
     () =>
-      involvedTargets.map((target) => ({
-        ...target,
-        input: { ...target.input, involvement: "reviewing" as const },
-      })),
+      (["authored", "reviewing"] as const).map((involvement) =>
+        involvedTargets.map((target) => ({ ...target, input: { ...target.input, involvement } })),
+      ),
     [involvedTargets],
   );
-  const reviewingList = usePullRequestList(reviewingTargets);
+  const authoredList = usePullRequestList(partitionTargets[0]!);
+  const reviewingList = usePullRequestList(partitionTargets[1]!);
   const mainProviders = result.data.listsInvolved;
   const involved = pullRequestInvolvedMatcher(
     involvedTargets.length === 0
@@ -257,7 +258,12 @@ export function PullRequestsScreen(
         // Involved rows the main list has not reached yet join it, as on web.
         involvedTargets.length === 0
           ? result.entries
-          : [...result.entries, ...involvedList.entries, ...reviewingList.entries],
+          : [
+              ...result.entries,
+              ...involvedList.entries,
+              ...authoredList.entries,
+              ...reviewingList.entries,
+            ],
         controls,
         result.data?.viewers ?? {},
         query,
@@ -268,6 +274,7 @@ export function PullRequestsScreen(
       result.entries,
       involvedTargets,
       involvedList.entries,
+      authoredList.entries,
       reviewingList.entries,
       controls,
       query,
@@ -429,6 +436,7 @@ export function PullRequestsScreen(
             onRefresh={() => {
               result.onRefresh();
               involvedList.onRefresh();
+              authoredList.onRefresh();
               reviewingList.onRefresh();
             }}
             // The list already accounts for the navigation header in its content inset.

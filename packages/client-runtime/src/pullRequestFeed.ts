@@ -102,7 +102,7 @@ export interface PullRequestInvolvedEnvironment {
 }
 
 /**
- * For `PullRequestFeedOptions.involved`. A host that does not list involvement rules Others rows
+ * For `PullRequestFeedOptions.involved`. A host known not to list involvement rules Others rows
  * out. Elsewhere a row the listing cannot rule on counts as involved: no answer, an environment
  * or slice not read or failed, or a repository page that stopped at or after the row's update.
  */

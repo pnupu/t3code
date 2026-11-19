@@ -435,7 +435,7 @@ export const make = Effect.gen(function* () {
         .pipe(
           Effect.mapError(fail("listChangeRequests")),
           // An empty `involved` search is an answer only where search covers the repository;
-          // elsewhere a truncated page tells the caller it cannot rule on the repository's rows.
+          // elsewhere the read fails, so the caller cannot rule on that repository's rows.
           Effect.filterOrElse(
             (page) =>
               input.involvement !== "involved" ||
@@ -444,7 +444,18 @@ export const make = Effect.gen(function* () {
             (page) =>
               Cache.get(searchCoverage, coverageOf(input, input.repository)).pipe(
                 Effect.orElseSucceed(() => false),
-                Effect.map((covered) => (covered ? page : { ...page, truncated: true })),
+                Effect.filterOrFail(
+                  (covered) => covered,
+                  () =>
+                    new PullRequestProviderError({
+                      provider: SourceControlProviderKind.make("github"),
+                      operation: "listChangeRequests",
+                      reason: "failed",
+                      detail:
+                        "Search does not index this repository, so it cannot list involved pull requests.",
+                    }),
+                ),
+                Effect.as(page),
               ),
           ),
           Effect.map((page) => ({

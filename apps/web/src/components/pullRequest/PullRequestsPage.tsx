@@ -788,7 +788,15 @@ export function PullRequestsPage() {
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
   // The last answer stays while the read has none, so Involving me rows do not jump. An
   // environment that has not answered or failed is one the matcher cannot rule on.
-  const listedProviders = baselineQuery.data?.providers ?? listData?.providers ?? [];
+  // Per environment, as each server says for its own hosts; undefined from older servers.
+  const listsInvolvedByHost = new Map<string, boolean | undefined>(
+    [...baselineQuery.observations, ...listQuery.observations].flatMap(([environmentId, answer]) =>
+      answer.providers.map((provider) => [
+        `${environmentId} ${provider.host}`,
+        provider.listsInvolved,
+      ]),
+    ),
+  );
   const involvedKey = JSON.stringify(partitionTargets.involved);
   const answeredInvolved =
     involvedQuery.data === null
@@ -838,10 +846,7 @@ export function PullRequestsPage() {
                 error.environmentId === entry.environmentId && error.projectId === entry.projectId,
             ),
         },
-    (entry) => {
-      const provider = listedProviders.find((candidate) => candidate.host === entry.host);
-      return provider === undefined ? undefined : provider.listsInvolved === true;
-    },
+    (entry) => listsInvolvedByHost.get(`${entry.environmentId} ${entry.host}`),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHidden, setShowHidden] = useState(false);

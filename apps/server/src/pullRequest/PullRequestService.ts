@@ -1377,7 +1377,7 @@ export const make = Effect.gen(function* () {
           host: result.host,
           kind: result.kind,
           searchesOnHost: capabilities?.search ?? false,
-          ...(api?.listsInvolved === true ? { listsInvolved: true } : {}),
+          listsInvolved: api?.listsInvolved === true,
           actions: capabilities?.actions ?? [],
           projectCount: projectCounts.get(result.host) ?? 1,
           projectIds: refinedProjectIdsByHost.get(result.host),

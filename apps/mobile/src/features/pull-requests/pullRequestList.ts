@@ -215,8 +215,8 @@ export function mergeEnvironmentPullRequestPages(
 ) {
   const viewers: Record<string, string> = {};
   const localSearchHosts = new Set<string>();
-  /** `<environmentId> <host>`: whether that host narrows `involved` itself. */
-  const listsInvolved = new Map<string, boolean>();
+  /** `<environmentId> <host>`: whether that host narrows `involved`; undefined from older servers. */
+  const listsInvolved = new Map<string, boolean | undefined>();
   const environments = new Map<string, PullRequestInvolvedEnvironment>();
   const entries: EnvironmentPullRequestListEntry[] = [];
   const errors = [];
@@ -230,7 +230,7 @@ export function mergeEnvironmentPullRequestPages(
       viewers[`${environmentId} ${host}`] = viewer;
     for (const provider of pages.head.providers) {
       if (!provider.searchesOnHost) localSearchHosts.add(`${environmentId} ${provider.host}`);
-      listsInvolved.set(`${environmentId} ${provider.host}`, provider.listsInvolved === true);
+      listsInvolved.set(`${environmentId} ${provider.host}`, provider.listsInvolved);
     }
     errors.push(...pages.head.errors.map((error) => ({ ...error, environmentId })));
   }
