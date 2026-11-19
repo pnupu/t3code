@@ -120,20 +120,19 @@ export function usePullRequestFeed() {
   ) => {
     const repositoryKeyOf = (candidate: ScopeProject | undefined) =>
       candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
-    const key = repositoryKeyOf(
-      scope.find(
-        (candidate) =>
-          candidate.environmentId === project.environmentId && candidate.id === project.projectId,
-      ),
+    const own = scope.find(
+      (candidate) =>
+        candidate.environmentId === project.environmentId && candidate.id === project.projectId,
     );
+    // A carried row from outside the scope writes nothing the list does not show.
+    if (own === undefined) return [];
+    const key = repositoryKeyOf(own);
     if (key) {
       return scope.filter(
         (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
       );
     }
-    return canWrite(project.environmentId)
-      ? [{ id: project.projectId, environmentId: project.environmentId }]
-      : [];
+    return canWrite(own.environmentId) ? [own] : [];
   };
 
   const setProjectRule = (members: ReturnType<typeof ruleMembers>, rule: PullRequestFeedRule) => {
