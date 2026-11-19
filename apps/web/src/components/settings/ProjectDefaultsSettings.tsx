@@ -613,7 +613,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               }
             />
           ) : null}
-          {pullRequestFeedSupported && (scope.kind === "all" || scope.kind === "environment") ? (
+          {scope.kind === "all" || scope.kind === "environment" ? (
             <PullRequestFeedRulesSetting environmentIds={scope.environmentIds} />
           ) : null}
         </>

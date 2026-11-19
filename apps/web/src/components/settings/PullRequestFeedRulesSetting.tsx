@@ -21,7 +21,7 @@ export function PullRequestFeedRulesSetting(props: {
       description={
         rows.length === 0
           ? "No projects yet."
-          : "Each repository's rule. A rule set here applies to every copy of the repository."
+          : "Each repository's rule. A rule set here applies to every copy of the repository that this connection can change."
       }
     >
       {rows.length === 0 ? null : (
