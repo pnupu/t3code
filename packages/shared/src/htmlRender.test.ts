@@ -92,10 +92,19 @@ describe("readHtmlRenderLinkRequest", () => {
       url: "https://example.com/a",
       metaKey: false,
       ctrlKey: false,
+      shiftKey: false,
     });
     expect(
-      readHtmlRenderLinkRequest(link("https://example.com/a", { metaKey: true, ctrlKey: "yes" })),
-    ).toEqual({ id: 1, url: "https://example.com/a", metaKey: true, ctrlKey: false });
+      readHtmlRenderLinkRequest(
+        link("https://example.com/a", { metaKey: true, ctrlKey: "yes", shiftKey: true }),
+      ),
+    ).toEqual({
+      id: 1,
+      url: "https://example.com/a",
+      metaKey: true,
+      ctrlKey: false,
+      shiftKey: true,
+    });
     expect(readHtmlRenderLinkRequest(link("javascript:alert(1)"))).toBeUndefined();
     expect(readHtmlRenderLinkRequest(link("file:///etc/passwd"))).toBeUndefined();
     expect(

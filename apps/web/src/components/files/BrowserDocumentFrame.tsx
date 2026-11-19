@@ -47,7 +47,6 @@ import type { ExpandedImagePreview } from "~/components/chat/ExpandedImagePrevie
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { shortcutConflictKey } from "~/keybindings";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
-import { readLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
 
@@ -368,26 +367,22 @@ export function HtmlRenderDocument(props: {
   );
   const openChangeRequestLink = useOpenChangeRequestLink(props.threadRef);
   const openLink = useOpenLink(props.threadRef);
-  const open = useEffectEvent((url: string, modifiers: { metaKey: boolean; ctrlKey: boolean }) => {
-    if (modifiers.metaKey || modifiers.ctrlKey) {
-      void readLocalApi()
-        ?.shell.openExternal(url)
-        .catch((cause: unknown) => console.error(cause));
-      return;
-    }
-    if (
-      props.threadRef !== undefined &&
-      openChangeRequestLink(
-        { ...modifiers, preventDefault: () => undefined, stopPropagation: () => undefined },
-        url,
-        undefined,
-        props.threadRef.environmentId,
-      )
-    ) {
-      return;
-    }
-    void openLink(url, { event: modifiers }).catch((cause: unknown) => console.error(cause));
-  });
+  const open = useEffectEvent(
+    (url: string, modifiers: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }) => {
+      if (
+        props.threadRef !== undefined &&
+        openChangeRequestLink(
+          { ...modifiers, preventDefault: () => undefined, stopPropagation: () => undefined },
+          url,
+          undefined,
+          props.threadRef.environmentId,
+        )
+      ) {
+        return;
+      }
+      void openLink(url, { event: modifiers }).catch((cause: unknown) => console.error(cause));
+    },
+  );
   const { onFullscreenChange } = props;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reports fullscreen to the parent while the image viewer is open, and clears it on unmount
   useEffect(() => {

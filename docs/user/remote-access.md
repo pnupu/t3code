@@ -353,6 +353,13 @@ picker, and a finished download is offered for you to save. Popups such as
 sign-in windows open as their own tabs. Downloads stay on the host until the
 tab closes. Audio does not play on your device.
 
+Links in the chat and terminal open where **Settings → Browser** says. By
+default, Cmd-click (Ctrl-click on Windows and Linux) opens a link in the desktop
+app's own browser on your device. Cmd+Shift-click opens it in the browser on
+the thread's machine, which can reach that machine's `localhost`. When the
+browser you pick is not available, such as a device browser in a web client,
+the link opens in your default browser.
+
 On a phone, tap the floating preview's corner dot to show its controls, then
 **Pop into separate window** to keep watching in picture-in-picture over other
 apps.
