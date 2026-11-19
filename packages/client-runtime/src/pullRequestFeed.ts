@@ -319,7 +319,10 @@ const unique = (values: ReadonlyArray<string>) => [...new Set(values)];
  * settings are left out: their rule is unknown.
  */
 export function pullRequestFeedRuleRows<
-  Project extends RepositoryProject & { readonly title: string },
+  Project extends RepositoryProject & {
+    readonly title: string;
+    readonly isScratch?: boolean | undefined;
+  },
 >(
   projects: ReadonlyArray<Project>,
   environmentOf: (
@@ -328,6 +331,8 @@ export function pullRequestFeedRuleRows<
 ): ReadonlyArray<PullRequestFeedRuleRow<Project>> {
   const groups = new Map<string, { name: string; copies: PullRequestFeedRuleCopy<Project>[] }>();
   for (const project of projects) {
+    // Scratch projects have no pull requests to show, as in the pull request project pickers.
+    if (project.isScratch) continue;
     const environment = environmentOf(project.environmentId);
     if (environment === undefined) continue;
     const identity = project.repositoryIdentity;
