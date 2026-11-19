@@ -9,6 +9,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type MouseEvent,
+  type MouseEventHandler,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -91,7 +92,12 @@ export function PullRequestLinkPreview({
     confirmBeforeOpen === true
       ? cloneElement(link, {
           onClick: (event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            // Cmd/Ctrl clicks follow the link's own handler, which applies the link-target settings.
+            if (event.metaKey || event.ctrlKey) {
+              (link.props.onClick as MouseEventHandler<HTMLElement> | undefined)?.(event);
+              return;
+            }
+            if (event.shiftKey || event.altKey) return;
             event.preventDefault();
             event.stopPropagation();
             if (resolvingClick) return;

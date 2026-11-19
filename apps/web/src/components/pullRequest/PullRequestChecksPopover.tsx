@@ -108,9 +108,9 @@ function ChecksBody({
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => {
+                    onClick={(event) => {
                       if (!check.url) return;
-                      void openLink(check.url).catch((error: unknown) => {
+                      void openLink(check.url, { event }).catch((error: unknown) => {
                         console.error(error);
                         toastManager.add({
                           type: "error",
