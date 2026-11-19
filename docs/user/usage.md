@@ -156,6 +156,7 @@ current provider account. Some windows, such as a weekly Opus limit, count only 
 row to see when it resets and your pace. Turn on **Context window** to also show the thread's
 context use against the model's limit. A tick on the bar marks where the provider compacts
 automatically, when it reports that point.
+
 **Weekly usage**, on by default, shows the weekly windows of every connected provider as lines.
 To show them as rings, change **Settings → Appearance → Weekly usage style**, or right-click the card.
 
