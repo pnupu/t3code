@@ -227,11 +227,17 @@ describe("pull request feed rule rows", () => {
       Object.entries(overrides).map(([id, rule]) => [id, { pullRequestFeed: rule }]),
     ),
   });
-  const project = (environmentId: string, id: string, canonicalKey?: string) => ({
+  const project = (
+    environmentId: string,
+    id: string,
+    canonicalKey?: string,
+    isScratch = false,
+  ) => ({
     environmentId,
     id: ProjectId.make(id),
     title: id,
     repositoryIdentity: canonicalKey === undefined ? null : { canonicalKey },
+    isScratch,
   });
   const rows = (
     projects: ReadonlyArray<ReturnType<typeof project>>,
@@ -260,6 +266,7 @@ describe("pull request feed rule rows", () => {
         project("server", "web-copy", "github.com/x/web"),
         project("laptop", "notes"),
         project("offline", "lost", "github.com/x/web"),
+        project("laptop", "scratch", undefined, true),
       ],
       { laptop: { settings: settings("all") }, server: { settings: settings("all") } },
     );
