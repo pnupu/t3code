@@ -740,7 +740,7 @@ function BrowserModifiedLinkTargetSetting({
       {...searchableSetting(id)}
       title={`${gestureLabel} links`}
       devicePreference
-      description={`Where links in the chat and terminal open when you ${gestureLabel} them. When the browser you pick can't open a link, it opens in your default browser.`}
+      description={`Where links in the chat and terminal open when you ${gestureLabel} them. When the browser you pick isn't available for the thread, the link opens in your default browser.`}
       resetAction={
         linkTarget !== defaultValue ? (
           <SettingResetButton
