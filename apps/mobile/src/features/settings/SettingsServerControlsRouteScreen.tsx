@@ -485,17 +485,12 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     ))}
                   </SettingsSection>
                 ) : null}
-                {!projectSelected &&
-                targets.every(
-                  (target) =>
-                    target.environment.serverConfig.environment.capabilities.pullRequestFeed ===
-                    true,
-                ) ? (
+                {projectSelected ? null : (
                   <PullRequestFeedRulesSection
                     selectedIds={selectedIds}
                     targets={selectedTargets}
                   />
-                ) : null}
+                )}
                 {projectSelected || feed.hiddenUrls.length === 0 ? null : (
                   <SettingsSection
                     title="Hidden pull requests"
