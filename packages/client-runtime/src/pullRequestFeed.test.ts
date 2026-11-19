@@ -13,7 +13,9 @@ import {
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
+  pullRequestFeedRuleRows,
   type PullRequestFeedGroup,
+  type PullRequestFeedRuleAccess,
 } from "./pullRequestFeed.ts";
 
 const projectA = ProjectId.make("project-a");
@@ -210,5 +212,85 @@ describe("pull request feed rules", () => {
       ["https://h/b/2", "https://h/b/2"],
     ]);
     expect(isPullRequestHidden(hiddenPullRequestUrls(settings), "https://h/A/1")).toBe(true);
+  });
+});
+
+describe("pull request feed rule rows", () => {
+  const settings = (
+    pullRequestFeed: PullRequestFeedRule,
+    overrides: Record<string, PullRequestFeedRule> = {},
+  ) => ({
+    ...DEFAULT_SERVER_SETTINGS,
+    pullRequestFeed,
+    projectSettingsOverrides: Object.fromEntries(
+      Object.entries(overrides).map(([id, rule]) => [id, { pullRequestFeed: rule }]),
+    ),
+  });
+  const project = (environmentId: string, id: string, canonicalKey?: string) => ({
+    environmentId,
+    id: ProjectId.make(id),
+    title: id,
+    repositoryIdentity: canonicalKey === undefined ? null : { canonicalKey },
+  });
+  const rows = (
+    projects: ReadonlyArray<ReturnType<typeof project>>,
+    environments: Record<
+      string,
+      { settings: ReturnType<typeof settings>; access?: PullRequestFeedRuleAccess }
+    >,
+  ) =>
+    pullRequestFeedRuleRows(projects, (environmentId) => {
+      const environment = environments[environmentId];
+      return environment === undefined
+        ? undefined
+        : { label: environmentId, access: "writable", ...environment };
+    });
+
+  it("groups a repository's copies into one row and gives an unidentified project its own", () => {
+    const result = rows(
+      [
+        project("laptop", "web", "github.com/x/Web"),
+        project("server", "web-copy", "github.com/x/web"),
+        project("laptop", "notes"),
+        project("offline", "lost", "github.com/x/web"),
+      ],
+      { laptop: { settings: settings("all") }, server: { settings: settings("all") } },
+    );
+    expect(result.map((row) => [row.name, row.covers])).toEqual([
+      ["github.com/x/Web", "web, web-copy · laptop, server"],
+      ["notes", "notes · laptop"],
+    ]);
+  });
+
+  it("shows an inherited rule as the default and offers no reset", () => {
+    const [row] = rows([project("laptop", "web", "k"), project("server", "web", "k")], {
+      laptop: { settings: settings("authored") },
+      server: { settings: settings("authored") },
+    });
+    expect(row).toMatchObject({ rule: "authored", status: "Default rule.", canReset: false });
+  });
+
+  it("names each rule's environments when copies differ", () => {
+    const [row] = rows([project("laptop", "web", "k"), project("server", "web", "k")], {
+      laptop: { settings: settings("all") },
+      server: { settings: settings("all", { web: "hidden" }) },
+    });
+    expect(row).toMatchObject({
+      rule: null,
+      status: "Differs: All pull requests on laptop; Hidden on server.",
+      canReset: true,
+    });
+  });
+
+  it("says which copies this client cannot change and resets only writable ones", () => {
+    const [row] = rows([project("laptop", "web", "k"), project("server", "web", "k")], {
+      laptop: { settings: settings("all"), access: "disconnected" },
+      server: { settings: settings("all", { web: "all" }), access: "read-only" },
+    });
+    expect(row).toMatchObject({
+      rule: "all",
+      status: "Connect laptop to change it. This connection cannot change settings on server.",
+      canReset: false,
+    });
   });
 });

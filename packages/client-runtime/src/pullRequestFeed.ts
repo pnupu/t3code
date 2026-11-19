@@ -145,7 +145,10 @@ export function pullRequestRepositoryHidden<Project extends RepositoryProject>(
 type RepositoryProject = {
   readonly id: ProjectId;
   readonly environmentId: string;
-  readonly repositoryIdentity?: { readonly canonicalKey?: string | undefined } | null | undefined;
+  readonly repositoryIdentity?:
+    | { readonly canonicalKey?: string | undefined; readonly displayName?: string | undefined }
+    | null
+    | undefined;
 };
 
 /**
@@ -229,4 +232,119 @@ export function filterPullRequestFeed<
     return entries.length === 0 ? [] : [{ ...group, entries }];
   });
   return { groups: changed ? next : groups, hiddenCount, ruledOutCount };
+}
+
+/** Why this client cannot change a copy's rule, or `writable`. */
+export type PullRequestFeedRuleAccess = "writable" | "disconnected" | "outdated" | "read-only";
+
+export interface PullRequestFeedRuleCopy<Project> {
+  readonly project: Project;
+  readonly environmentLabel: string;
+  readonly rule: PullRequestFeedRule;
+  /** False when the project inherits its environment's default rule. */
+  readonly overridden: boolean;
+  readonly access: PullRequestFeedRuleAccess;
+}
+
+export interface PullRequestFeedRuleRow<Project> {
+  readonly key: string;
+  readonly name: string;
+  /** The project titles and environments the row covers. */
+  readonly covers: string;
+  readonly copies: ReadonlyArray<PullRequestFeedRuleCopy<Project>>;
+  /** The copies' one rule, or null when they differ. */
+  readonly rule: PullRequestFeedRule | null;
+  /** Inheritance, disagreement, and the copies this client cannot change, in short sentences. */
+  readonly status: string;
+  readonly canReset: boolean;
+}
+
+const ruleLabel = (rule: PullRequestFeedRule) =>
+  PULL_REQUEST_FEED_RULES.find((option) => option.value === rule)?.label ?? rule;
+
+const ACCESS_NOTES: Record<
+  Exclude<PullRequestFeedRuleAccess, "writable">,
+  (on: string) => string
+> = {
+  disconnected: (on) => `Connect ${on} to change it.`,
+  outdated: (on) => `Update ${on} to change it.`,
+  "read-only": (on) => `This connection cannot change settings on ${on}.`,
+};
+
+const unique = (values: ReadonlyArray<string>) => [...new Set(values)];
+
+/**
+ * One row per repository, keyed like `pullRequestRepositoryRules`, so a write covers every copy
+ * the feed reads. A project without a repository identity gets its own row. Environments without
+ * settings are left out: their rule is unknown.
+ */
+export function pullRequestFeedRuleRows<
+  Project extends RepositoryProject & { readonly title: string },
+>(
+  projects: ReadonlyArray<Project>,
+  environmentOf: (environmentId: Project["environmentId"]) =>
+    | {
+        readonly label: string;
+        readonly settings: PullRequestFeedSettings;
+        readonly access: PullRequestFeedRuleAccess;
+      }
+    | undefined,
+): ReadonlyArray<PullRequestFeedRuleRow<Project>> {
+  const groups = new Map<string, { name: string; copies: PullRequestFeedRuleCopy<Project>[] }>();
+  for (const project of projects) {
+    const environment = environmentOf(project.environmentId);
+    if (environment === undefined) continue;
+    const identity = project.repositoryIdentity;
+    const repositoryKey = identity?.canonicalKey?.toLowerCase();
+    const key = repositoryKey ?? `project ${project.environmentId} ${project.id}`;
+    const copy: PullRequestFeedRuleCopy<Project> = {
+      project,
+      environmentLabel: environment.label,
+      rule: pullRequestFeedRule(environment.settings, project.id),
+      overridden:
+        environment.settings.projectSettingsOverrides[project.id]?.pullRequestFeed !== undefined,
+      access: environment.access,
+    };
+    const group = groups.get(key);
+    if (group) group.copies.push(copy);
+    else
+      groups.set(key, {
+        name: identity?.displayName ?? identity?.canonicalKey ?? project.title,
+        copies: [copy],
+      });
+  }
+  const rows = [...groups].map(([key, { name, copies }]) => {
+    const rules = unique(copies.map((copy) => copy.rule)) as PullRequestFeedRule[];
+    const rule = rules.length === 1 ? rules[0]! : null;
+    const notes: string[] = [];
+    if (rule === null) {
+      const parts = rules.map((candidate) => {
+        const on = unique(
+          copies.filter((copy) => copy.rule === candidate).map((copy) => copy.environmentLabel),
+        );
+        return `${ruleLabel(candidate)} on ${on.join(", ")}`;
+      });
+      notes.push(`Differs: ${parts.join("; ")}.`);
+    } else if (copies.every((copy) => !copy.overridden)) {
+      notes.push("Default rule.");
+    }
+    for (const access of ["disconnected", "outdated", "read-only"] as const) {
+      const on = unique(
+        copies.filter((copy) => copy.access === access).map((copy) => copy.environmentLabel),
+      );
+      if (on.length > 0) notes.push(ACCESS_NOTES[access](on.join(", ")));
+    }
+    return {
+      key,
+      name,
+      covers: `${unique(copies.map((copy) => copy.project.title)).join(", ")} · ${unique(
+        copies.map((copy) => copy.environmentLabel),
+      ).join(", ")}`,
+      copies,
+      rule,
+      status: notes.join(" "),
+      canReset: copies.some((copy) => copy.overridden && copy.access === "writable"),
+    };
+  });
+  return rows.sort((left, right) => left.name.localeCompare(right.name));
 }
