@@ -174,7 +174,7 @@ describe("evaluatePullRequestWatch", () => {
       noRemarks,
     );
     assert.deepEqual(failed.changes, [
-      { kind: "checks-failed", failed: [check("test", "failure")] },
+      { kind: "checks-failed", failed: [check("test", "failure")], settled: true },
     ]);
     const clean = evaluatePullRequestWatch(
       failed.next,
@@ -226,7 +226,7 @@ describe("evaluatePullRequestWatch", () => {
       noRemarks,
     );
     assert.deepEqual(failed.changes, [
-      { kind: "checks-failed", failed: [check("test", "failure")] },
+      { kind: "checks-failed", failed: [check("test", "failure")], settled: true },
     ]);
   });
 
@@ -269,7 +269,7 @@ describe("evaluatePullRequestWatch", () => {
           .changes,
         status === "success"
           ? [{ kind: "checks-passed", count: 1, required: false }]
-          : [{ kind: "checks-failed", failed: [check("test", "failure")] }],
+          : [{ kind: "checks-failed", failed: [check("test", "failure")], settled: true }],
       );
     },
   );
@@ -455,7 +455,7 @@ describe("evaluatePullRequestWatch", () => {
     );
   });
 
-  it("reports each failure at once, even while another check never finishes", () => {
+  it("reports each failure at once, and once more when the other checks finish", () => {
     const bot = check("CodeRabbit", "pending");
     const first = detail({ checks: [check("lint", "failure"), check("test", "pending"), bot] });
     const lint = evaluatePullRequestWatch(watch(), first, noRemarks);
@@ -465,6 +465,84 @@ describe("evaluatePullRequestWatch", () => {
     const second = detail({ checks: [check("lint", "failure"), check("test", "failure"), bot] });
     const test = evaluatePullRequestWatch(lint.next, second, noRemarks);
     assert.deepEqual(test.changes, [{ kind: "checks-failed", failed: [check("test", "failure")] }]);
+
+    // A review bot that passes after another check failed is still the result the agent waits on.
+    const reviewed = [
+      check("lint", "failure"),
+      check("test", "failure"),
+      check("CodeRabbit", "success"),
+    ];
+    const settled = evaluatePullRequestWatch(test.next, detail({ checks: reviewed }), noRemarks);
+    assert.deepEqual(settled.changes, [
+      { kind: "checks-finished", failed: [check("lint", "failure"), check("test", "failure")] },
+    ]);
+    assert.deepEqual(
+      evaluatePullRequestWatch(settled.next, detail({ checks: reviewed }), noRemarks).changes,
+      [],
+    );
+    // A failure in the read where the rest finish says so, since no later read will.
+    const together = evaluatePullRequestWatch(lint.next, detail({ checks: reviewed }), noRemarks);
+    assert.deepEqual(together.changes, [
+      { kind: "checks-failed", failed: [check("test", "failure")], settled: true },
+    ]);
+    // A push elsewhere in the thread drops the pending answer; the finish is still news.
+    const { checksPending: _dropped, ...reopened } = test.next;
+    assert.deepEqual(
+      evaluatePullRequestWatch(reopened, detail({ checks: reviewed }), noRemarks).changes,
+      settled.changes,
+    );
+    // So is a bot first seen already finished.
+    const failedOnly = detail({ checks: [check("lint", "failure"), check("test", "failure")] });
+    const unseen = evaluatePullRequestWatch(watch(), failedOnly, noRemarks).next;
+    assert.deepEqual(
+      evaluatePullRequestWatch(unseen, detail({ checks: reviewed }), noRemarks).changes,
+      settled.changes,
+    );
+    // A read that cannot tell whether workflows await approval still tells, and says so.
+    const unavailable = { ...check("Workflow approval status", "pending"), placeholder: true };
+    const unread = detail({ checks: [...reviewed, unavailable] });
+    assert.deepEqual(evaluatePullRequestWatch(test.next, unread, noRemarks).changes, [
+      {
+        kind: "checks-finished",
+        failed: [check("lint", "failure"), check("test", "failure")],
+        approvalUnknown: true,
+      },
+    ]);
+    // A first read with an unread approval lookup still saw the checks, so their finish is news.
+    const blind = evaluatePullRequestWatch(
+      watch({ awaitingBaseline: "all" }),
+      detail({ checks: [...second.checks, unavailable] }),
+      noRemarks,
+    );
+    assert.deepEqual(blind.changes, []);
+    assert.deepEqual(
+      evaluatePullRequestWatch(blind.next, detail({ checks: reviewed }), noRemarks).changes,
+      settled.changes,
+    );
+    // So is a failure in the read where the rest finish, also after a read with nothing finished.
+    for (const [seen, failed] of [
+      [first.checks, [check("test", "failure")]],
+      [
+        [check("test", "pending"), bot],
+        [check("lint", "failure"), check("test", "failure")],
+      ],
+    ] as const) {
+      const before = evaluatePullRequestWatch(
+        watch({ awaitingBaseline: "all" }),
+        detail({ checks: [...seen, unavailable] }),
+        noRemarks,
+      ).next;
+      assert.deepEqual(
+        evaluatePullRequestWatch(before, detail({ checks: reviewed }), noRemarks).changes,
+        [{ kind: "checks-failed", failed, settled: true }],
+      );
+    }
+    // A watch saved before finished names were kept learns them without waking.
+    const { finishedChecks: _legacy, ...legacy } = settled.next;
+    assert.deepEqual(
+      evaluatePullRequestWatch(legacy, detail({ checks: reviewed }), noRemarks).changes,
+      [],
+    );
 
     const rerun = evaluatePullRequestWatch(test.next, first, noRemarks);
     assert.equal(evaluatePullRequestWatch(rerun.next, second, noRemarks).changes.length, 1);
@@ -477,6 +555,21 @@ describe("evaluatePullRequestWatch", () => {
     assert.deepEqual(evaluatePullRequestWatch(watch(), gated, noRemarks).changes, [
       { kind: "checks-failed", failed: [check("lint", "failure")] },
       { kind: "checks-awaiting-approval", checks: [approval] },
+    ]);
+    const gatedRunning = detail({ checks: [...gated.checks, check("test", "pending")] });
+    const held = evaluatePullRequestWatch(watch(), gatedRunning, noRemarks).next;
+    const gatedDone = detail({ checks: [...gated.checks, check("test", "success")] });
+    const holding = evaluatePullRequestWatch(held, gatedDone, noRemarks);
+    assert.deepEqual(holding.changes, []);
+    const approved = detail({
+      checks: [
+        { ...approval, status: "success" },
+        check("lint", "failure"),
+        check("test", "success"),
+      ],
+    });
+    assert.deepEqual(evaluatePullRequestWatch(holding.next, approved, noRemarks).changes, [
+      { kind: "checks-finished", failed: [check("lint", "failure")] },
     ]);
   });
 
@@ -578,7 +671,7 @@ describe("evaluatePullRequestWatch", () => {
     const failed = detail({ checks: [required, check("e2e", "failure")] });
     const failure = evaluatePullRequestWatch(first.next, failed, noRemarks);
     assert.deepEqual(failure.changes, [
-      { kind: "checks-failed", failed: [check("e2e", "failure")] },
+      { kind: "checks-failed", failed: [check("e2e", "failure")], settled: true },
     ]);
     const repeated = evaluatePullRequestWatch(failure.next, failed, noRemarks);
     assert.deepEqual(repeated.changes, []);
@@ -887,7 +980,7 @@ describe("evaluatePullRequestWatch", () => {
     assert.equal(read.next.mergeQueueRemovalId, "landed");
   });
 
-  it("does not spend the comment wake limit on check results", () => {
+  it("does not spend the wake limit on check failures", () => {
     const tired = watch({ headSha: "aaaaaaaaaa", wakes: PULL_REQUEST_WATCH_WAKE_LIMIT - 1 });
     const result = evaluatePullRequestWatch(
       tired,
@@ -902,6 +995,16 @@ describe("evaluatePullRequestWatch", () => {
     const comments = [remark("reviewer", "2026-10-02T12:10:00Z")];
     const tired = watch({ headSha: "aaaaaaaaaa", wakes: PULL_REQUEST_WATCH_WAKE_LIMIT - 1 });
     assert.isTrue(evaluatePullRequestWatch(tired, detail(), comments).exhausted);
+    // A bot that reruns its check with each comment is still a comment loop.
+    const rerun = { ...tired, failedChecks: ["lint"], checksPending: true };
+    const rerunDone = detail({ checks: [check("lint", "failure"), check("bot", "success")] });
+    const looped = evaluatePullRequestWatch(rerun, rerunDone, comments);
+    assert.deepEqual(
+      looped.changes.map((change) => change.kind),
+      ["checks-finished", "remarks"],
+    );
+    assert.isTrue(looped.exhausted);
+    assert.isTrue(evaluatePullRequestWatch(rerun, rerunDone, noRemarks).exhausted);
     const pushed = evaluatePullRequestWatch(tired, detail({ headSha: "cccccccccc" }), comments);
     assert.isFalse(pushed.exhausted);
     assert.equal(pushed.next.wakes, 1);
