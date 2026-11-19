@@ -437,11 +437,6 @@ export const PullRequestProviderSummary = Schema.Struct({
   host: TrimmedNonEmptyString,
   kind: SourceControlProviderKind,
   searchesOnHost: Schema.Boolean,
-  /**
-   * The host narrows `involved` itself; where false, a row involves the viewer only by its group.
-   * Absent from older servers, so clients cannot tell either way.
-   */
-  listsInvolved: Schema.optional(Schema.Boolean),
   actions: Schema.optional(ForwardCompatibleArray(PullRequestAction)),
   projectCount: PositiveInt,
   /** SSH checkouts can resolve to an HTTP authority different from their stored identity. */

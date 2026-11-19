@@ -1371,13 +1371,12 @@ export const make = Effect.gen(function* () {
 
     const providers: ReadonlyArray<PullRequestProviderSummary> = [
       ...viewerResults.map((result) => {
-        const api = projects.find((project) => project.host === result.host)?.api;
-        const capabilities = api?.capabilities;
+        const capabilities = projects.find((project) => project.host === result.host)?.api
+          .capabilities;
         return {
           host: result.host,
           kind: result.kind,
           searchesOnHost: capabilities?.search ?? false,
-          listsInvolved: api?.listsInvolved === true,
           actions: capabilities?.actions ?? [],
           projectCount: projectCounts.get(result.host) ?? 1,
           projectIds: refinedProjectIdsByHost.get(result.host),
@@ -1438,8 +1437,8 @@ export const make = Effect.gen(function* () {
     const cursorOf = (project: SupportedProject): ListCursor | undefined =>
       continuation?.get(project.cursorKey);
 
-    // A host that cannot narrow `involved` is not read for it: its providers entry says so, and
-    // clients decide such a row from its own group.
+    // A host that cannot narrow `involved` answers it with nothing: clients take that project's
+    // rows from its authored and review-requested partitions.
     const skipsInvolved = (project: SupportedProject) =>
       involvement === "involved" && project.api.listsInvolved !== true;
 

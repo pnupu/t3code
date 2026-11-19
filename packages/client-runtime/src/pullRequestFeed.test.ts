@@ -50,60 +50,19 @@ describe("pull request feed rules", () => {
     expect(pullRequestFeedShows(rule, group, involvement, involved)).toBe(shown);
   });
 
-  it("counts a row the involved listing cannot rule on as involved", () => {
-    const row = (repository: string, url: string, updatedAt: string, environmentId = "env") => ({
-      environmentId,
-      projectId: repository,
-      host: "github.com",
-      repository,
-      url,
-      updatedAt,
+  it("takes an involved project's rows only from its listing, unless it is not ready", () => {
+    const row = (projectId: string, url: string) => ({ projectId, url });
+    // A search, or no read: every row counts, as under the All rule.
+    expect(pullRequestInvolvedMatcher(null)(row("web", "https://h/a/1"))).toBe(true);
+    const involved = pullRequestInvolvedMatcher({
+      entries: [row("web", "https://h/a/1")],
+      ready: (entry: { readonly url: string; readonly projectId: string }) =>
+        entry.projectId !== "failed",
     });
-    // The busy repository's page ends at 07-05; the quiet one is read to its end.
-    const listed = [
-      row("acme/busy", "https://h/a/9", "2026-07-05"),
-      row("acme/quiet", "https://h/b/1", "2026-07-01"),
-    ];
-    const lists = (entry: { readonly host: string }) =>
-      entry.host === "github.com" ? true : entry.host === "gitlab.com" ? false : undefined;
-    expect(
-      pullRequestInvolvedMatcher(null, lists)(row("acme/busy", "https://h/a/1", "2026-07-03")),
-    ).toBe(true);
-    // A host that cannot list involvement leaves an Others row out, answered or not.
-    const gitlab = { ...row("acme/web", "https://l/a/1", "2026-07-06"), host: "gitlab.com" };
-    expect(pullRequestInvolvedMatcher(null, lists)(gitlab)).toBe(false);
-    expect(pullRequestInvolvedMatcher(null, lists)({ ...gitlab, host: "git.example" })).toBe(true);
-    const involved = pullRequestInvolvedMatcher(
-      {
-        entries: listed,
-        environments: new Map([
-          [
-            "env",
-            {
-              truncated: true,
-              cursorKeys: new Set(["github.com acme/busy", "github.com acme/silent"]),
-            },
-          ],
-          ["bare", { truncated: true, cursorKeys: new Set<string>() }],
-        ]),
-        unknown: (entry) => entry.repository === "acme/failed",
-      },
-      lists,
-    );
-    expect(involved(row("acme/busy", "https://h/a/9", "2026-07-05"))).toBe(true);
-    // Older than its own repository's page, though newer than the oldest row of the answer.
-    expect(involved(row("acme/busy", "https://h/a/2", "2026-07-03"))).toBe(true);
-    // Tied with its repository's last row, so the next page could hold it.
-    expect(involved(row("acme/busy", "https://h/a/3", "2026-07-05"))).toBe(true);
-    expect(involved(row("acme/busy", "https://h/a/4", "2026-07-06"))).toBe(false);
-    // Another repository's truncation does not page a repository read to its end.
-    expect(involved(row("acme/quiet", "https://h/b/2", "2026-07-03"))).toBe(false);
-    expect(involved(row("acme/idle", "https://h/f/1", "2026-07-06"))).toBe(false);
-    expect(involved(row("acme/failed", "https://h/c/1", "2026-07-06"))).toBe(true);
-    expect(involved(row("acme/silent", "https://h/d/1", "2026-07-06"))).toBe(true);
-    expect(involved(row("acme/web", "https://h/e/1", "2026-07-06", "bare"))).toBe(true);
-    expect(involved(row("acme/web", "https://h/e/2", "2026-07-06", "pending"))).toBe(true);
-    expect(involved({ ...gitlab, environmentId: "env" })).toBe(false);
+    expect(involved(row("web", "https://h/a/1"))).toBe(true);
+    expect(involved(row("web", "https://h/a/2"))).toBe(false);
+    // A failed, pending, or unindexed listing shows the project's rows.
+    expect(involved(row("failed", "https://h/b/1"))).toBe(true);
   });
 
   it("resolves a project override over the environment rule", () => {

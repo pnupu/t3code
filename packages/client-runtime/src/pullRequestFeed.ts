@@ -85,59 +85,20 @@ export function pullRequestFeedShows(
   }
 }
 
-type InvolvedRow = {
-  readonly url: string;
-  readonly updatedAt: string;
-  readonly environmentId: string;
-  readonly projectId: string;
-  readonly host: string;
-  readonly repository: string;
-};
-
-/** One environment's answer to the `involved` read: its truncation and its per-repository cursors. */
-export interface PullRequestInvolvedEnvironment {
-  readonly truncated: boolean;
-  /** The service's cursor keys, `<host> <repository>`, of the repositories that have more. */
-  readonly cursorKeys: ReadonlySet<string>;
-}
-
 /**
- * For `PullRequestFeedOptions.involved`. A host known not to list involvement rules Others rows
- * out. Elsewhere a row the listing cannot rule on counts as involved: no answer, an environment
- * or slice not read or failed, or a repository page that stopped at or after the row's update.
+ * For `PullRequestFeedOptions.involved`: a row is involved when its project's involved listing
+ * holds it. With no answer (a search, or no read), or for a project whose listing is not ready
+ * (not read, pending, failed, or unindexed), every row counts, as under the All rule.
  */
-export function pullRequestInvolvedMatcher(
+export function pullRequestInvolvedMatcher<Row extends { readonly url: string }>(
   answer: {
-    readonly entries: ReadonlyArray<InvolvedRow>;
-    readonly environments: ReadonlyMap<string, PullRequestInvolvedEnvironment>;
-    readonly unknown: (entry: InvolvedRow) => boolean;
+    readonly entries: ReadonlyArray<{ readonly url: string }>;
+    readonly ready: (entry: Row) => boolean;
   } | null,
-  listsInvolved: (entry: InvolvedRow) => boolean | undefined,
-): (entry: InvolvedRow) => boolean {
-  if (answer === null) return (entry) => listsInvolved(entry) !== false;
-  const sliceOf = (entry: InvolvedRow) => `${entry.host} ${entry.repository.toLowerCase()}`;
-  const urls = new Set<string>();
-  const oldest = new Map<string, string>();
-  for (const entry of answer.entries) {
-    urls.add(entry.url);
-    const key = `${entry.environmentId} ${sliceOf(entry)}`;
-    const held = oldest.get(key);
-    if (held === undefined || entry.updatedAt < held) oldest.set(key, entry.updatedAt);
-  }
-  return (entry) => {
-    if (urls.has(entry.url)) return true;
-    const lists = listsInvolved(entry);
-    if (lists === false) return false;
-    const environment = answer.environments.get(entry.environmentId);
-    if (environment === undefined || answer.unknown(entry)) return true;
-    // A host with no cursor to give says only that the environment has more.
-    const paged =
-      environment.cursorKeys.has(sliceOf(entry)) ||
-      (environment.truncated && environment.cursorKeys.size === 0);
-    if (!paged) return false;
-    const boundary = oldest.get(`${entry.environmentId} ${sliceOf(entry)}`);
-    return boundary === undefined || entry.updatedAt <= boundary;
-  };
+): (entry: Row) => boolean {
+  if (answer === null) return () => true;
+  const urls = new Set(answer.entries.map((entry) => entry.url));
+  return (entry) => urls.has(entry.url) || !answer.ready(entry);
 }
 
 type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefined;

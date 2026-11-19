@@ -216,27 +216,36 @@ export function PullRequestsScreen(
   );
   const authoredList = usePullRequestList(partitionTargets[0]!);
   const reviewingList = usePullRequestList(partitionTargets[1]!);
-  const mainProviders = result.data.listsInvolved;
+  // As on web: a project's listing is ready once its environment answered and the project was
+  // read without error; until then its rows show as under the All rule.
   const involved = pullRequestInvolvedMatcher(
     involvedTargets.length === 0
       ? null
       : {
           entries: involvedList.entries,
-          environments: involvedList.data.environments,
-          unknown: (entry) =>
-            !involvedTargets.some(
+          ready: (entry: {
+            readonly url: string;
+            readonly environmentId: string;
+            readonly projectId: string;
+          }) =>
+            involvedList.data.answered.has(entry.environmentId) &&
+            involvedTargets.some(
               (target) =>
                 target.environmentId === entry.environmentId &&
                 target.input.projectIds.some((id) => id === entry.projectId),
-            ) ||
-            involvedList.data.errors.some(
+            ) &&
+            !involvedList.data.errors.some(
               (error) =>
                 error.environmentId === entry.environmentId &&
                 (!("projectId" in error) || error.projectId === entry.projectId),
             ),
         },
-    (entry) => mainProviders.get(`${entry.environmentId} ${entry.host}`),
   );
+  // The involved listing is a project's only source of Others rows, so it pages with the list.
+  const loadMore = (retry?: boolean) => {
+    void result.loadMore(retry);
+    if (involvedList.hasMore) void involvedList.loadMore(retry);
+  };
   const connectedTargets = targets.filter((target) =>
     environments.some(
       (environment) =>
@@ -427,7 +436,7 @@ export function PullRequestsScreen(
         estimatedItemSize={88}
         drawDistance={1_000}
         maintainVisibleContentPosition={result.continued ? maintainVisiblePosition : false}
-        onEndReached={() => void result.loadMore()}
+        onEndReached={() => loadMore()}
         onEndReachedThreshold={0.5}
         onViewableItemsChanged={result.onViewableItemsChanged}
         refreshControl={
@@ -509,16 +518,16 @@ export function PullRequestsScreen(
               <Button
                 label="Try again"
                 accessibilityLabel="Retry loading more pull requests"
-                onPress={() => void result.loadMore(true)}
+                onPress={() => loadMore(true)}
               />
             </View>
-          ) : result.hasMore ? (
+          ) : result.hasMore || involvedList.hasMore ? (
             // A filtered page can be too short to scroll, which leaves nothing to reach the end of.
             <View className="items-center py-4">
               <Button
                 label="Load more"
                 accessibilityLabel="Load more pull requests"
-                onPress={() => void result.loadMore()}
+                onPress={() => loadMore()}
               />
             </View>
           ) : undefined
