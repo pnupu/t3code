@@ -5,6 +5,8 @@ import {
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
+  pullRequestFeedRuleRows,
+  type PullRequestFeedRuleRow,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
   pullRequestRepositoryRules,
@@ -31,6 +33,7 @@ import {
   pendingScopedWritesAtom,
   planEnvironmentSettingsPatch,
   planProjectOverridePatch,
+  planProjectOverridesClear,
 } from "../settings/scopedSettings";
 import { useRunScopedPlan } from "../settings/useScopedSettings";
 import { runPullRequestLinkAction } from "./pullRequestLinkContextMenu";
@@ -142,6 +145,49 @@ export function usePullRequestFeed() {
     );
   };
 
+  /** One row per repository in these environments, for the Settings overview. */
+  const ruleRows = (environmentIds: ReadonlyArray<EnvironmentId>) =>
+    pullRequestFeedRuleRows(
+      projects.filter((project) => environmentIds.includes(project.environmentId)),
+      (environmentId) => {
+        const environment = environments.find(
+          (candidate) => candidate.environmentId === environmentId,
+        );
+        const config = environment?.serverConfig;
+        if (!environment || !config) return undefined;
+        return {
+          label: environment.label,
+          settings: config.settings,
+          access: !connected.has(environmentId)
+            ? "disconnected"
+            : config.environment.capabilities.pullRequestFeed !== true
+              ? "outdated"
+              : readEnvironmentScope(environmentId, AuthSettingsWriteScope)
+                ? "writable"
+                : "read-only",
+        };
+      },
+    );
+  type RuleRow = PullRequestFeedRuleRow<ScopeProject>;
+  const writableCopies = (row: RuleRow) => row.copies.filter((copy) => copy.access === "writable");
+  const setRowRule = (row: RuleRow, rule: PullRequestFeedRule) =>
+    setProjectRule(
+      writableCopies(row).map((copy) => copy.project),
+      rule,
+    );
+  const resetRowRule = (row: RuleRow) =>
+    runPlan(environments, (current) =>
+      planProjectOverridesClear(
+        current,
+        writableCopies(row).flatMap((copy) =>
+          copy.overridden
+            ? [{ environmentId: copy.project.environmentId, projectId: copy.project.id }]
+            : [],
+        ),
+        ["pullRequestFeed"],
+      ),
+    );
+
   const openRowMenu = async (
     entry: EnvironmentPullRequestEntry,
     openLabel: string,
@@ -219,5 +265,8 @@ export function usePullRequestFeed() {
     canUnhide,
     unhideBlockedBy,
     showRowMenu,
+    ruleRows,
+    setRowRule,
+    resetRowRule,
   };
 }
