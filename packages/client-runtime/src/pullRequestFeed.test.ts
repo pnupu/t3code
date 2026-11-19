@@ -20,6 +20,7 @@ import {
   pullRequestFeedShows,
   pullRequestInvolvedMatcher,
   type PullRequestFeedGroup,
+  type PullRequestInvolvedSlice,
 } from "./pullRequestFeed.ts";
 
 const projectA = ProjectId.make("project-a");
@@ -51,15 +52,37 @@ describe("pull request feed rules", () => {
   });
 
   it("counts a row the involved listing cannot rule on as involved", () => {
-    const row = (url: string, updatedAt: string) => ({ url, updatedAt });
-    const listed = [row("https://h/a/2", "2026-07-02")];
-    expect(pullRequestInvolvedMatcher(null)(row("https://h/a/1", "2026-07-03"))).toBe(true);
-    const complete = pullRequestInvolvedMatcher({ entries: listed, complete: true });
-    expect(complete(row("https://h/a/2", "2026-07-02"))).toBe(true);
-    expect(complete(row("https://h/a/1", "2026-07-01"))).toBe(false);
-    const paged = pullRequestInvolvedMatcher({ entries: listed, complete: false });
-    expect(paged(row("https://h/a/3", "2026-07-03"))).toBe(false);
-    expect(paged(row("https://h/a/1", "2026-07-01"))).toBe(true);
+    const row = (projectId: string, url: string, updatedAt: string) => ({
+      environmentId: "env",
+      projectId,
+      url,
+      updatedAt,
+    });
+    // The busy slice's page ends at 07-05; the quiet slice reaches back to 07-01.
+    const listed = [
+      row("busy", "https://h/a/9", "2026-07-05"),
+      row("quiet", "https://h/b/1", "2026-07-01"),
+    ];
+    expect(pullRequestInvolvedMatcher(null)(row("busy", "https://h/a/1", "2026-07-03"))).toBe(true);
+    const slices: Record<string, PullRequestInvolvedSlice> = {
+      busy: "paged",
+      quiet: "complete",
+      failed: "unknown",
+      silent: "paged",
+    };
+    const involved = pullRequestInvolvedMatcher({
+      entries: listed,
+      slice: (_, projectId) => slices[projectId] ?? "unknown",
+    });
+    expect(involved(row("busy", "https://h/a/9", "2026-07-05"))).toBe(true);
+    // Older than its own slice's page, though newer than the oldest row of the whole answer.
+    expect(involved(row("busy", "https://h/a/2", "2026-07-03"))).toBe(true);
+    // Tied with its slice's last row, so the next page could hold it.
+    expect(involved(row("busy", "https://h/a/3", "2026-07-05"))).toBe(true);
+    expect(involved(row("busy", "https://h/a/4", "2026-07-06"))).toBe(false);
+    expect(involved(row("quiet", "https://h/b/2", "2026-07-03"))).toBe(false);
+    expect(involved(row("failed", "https://h/c/1", "2026-07-06"))).toBe(true);
+    expect(involved(row("silent", "https://h/d/1", "2026-07-06"))).toBe(true);
   });
 
   it("resolves a project override over the environment rule", () => {

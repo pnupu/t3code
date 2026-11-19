@@ -1,4 +1,5 @@
 import { usePaneRole } from "../../components/ui/Pane";
+import { ProjectId } from "@t3tools/contracts";
 import { Button } from "../../components/ui/Button";
 import {
   applyPullRequestDraftFilterChange,
@@ -173,35 +174,52 @@ export function PullRequestsScreen(
   );
   const result = usePullRequestList(targets);
   const feed = usePullRequestFeed();
-  // As on web: only environments with a project on the `involved` rule read that listing.
-  const involvedEnvironmentIds = controls.projectId
-    ? ""
-    : [
-        ...new Set(
-          allProjects.flatMap((project) =>
+  // As on web: only the projects on the `involved` rule read that listing, after the main list
+  // answers, and not while searching, when the rule shows every pull request.
+  const involvedProjectKey =
+    controls.projectId || controls.involvement !== "all" || query.trim().length > 0
+      ? ""
+      : allProjects
+          .flatMap((project) =>
             feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
             "involved"
-              ? [project.environmentId]
+              ? [`${project.environmentId} ${project.id}`]
               : [],
-          ),
-        ),
-      ].join("\n");
-  const involvedTargets = useMemo(
-    () =>
-      controls.involvement !== "all"
+          )
+          .join("\n");
+  const mainAnswered = result.entries.length > 0;
+  const involvedTargets = useMemo(() => {
+    if (!mainAnswered || involvedProjectKey === "") return [];
+    const ruled = involvedProjectKey.split("\n");
+    return targets.flatMap((target) => {
+      const projectIds = ruled.flatMap((key) => {
+        const [environmentId, projectId] = key.split(" ");
+        return environmentId === target.environmentId && projectId
+          ? [ProjectId.make(projectId)]
+          : [];
+      });
+      return projectIds.length === 0
         ? []
-        : targets.flatMap((target) =>
-            involvedEnvironmentIds.split("\n").includes(target.environmentId)
-              ? [{ ...target, input: { ...target.input, involvement: "involved" as const } }]
-              : [],
-          ),
-    [controls.involvement, involvedEnvironmentIds, targets],
-  );
+        : [{ ...target, input: { ...target.input, involvement: "involved" as const, projectIds } }];
+    });
+  }, [mainAnswered, involvedProjectKey, targets]);
   const involvedList = usePullRequestList(involvedTargets);
   const involved = pullRequestInvolvedMatcher(
-    involvedTargets.length === 0 || involvedList.isPending || involvedList.error !== null
+    involvedTargets.length === 0 || !involvedList.answered || involvedList.data.errors.length > 0
       ? null
-      : { entries: involvedList.entries, complete: !involvedList.hasMore },
+      : {
+          entries: involvedList.entries,
+          slice: (environmentId, projectId) =>
+            !involvedTargets.some(
+              (target) =>
+                target.environmentId === environmentId &&
+                target.input.projectIds.some((id) => id === projectId),
+            )
+              ? "unknown"
+              : involvedList.hasMore
+                ? "paged"
+                : "complete",
+        },
   );
   const connectedTargets = targets.filter((target) =>
     environments.some(
@@ -221,14 +239,25 @@ export function PullRequestsScreen(
   const entries = useMemo(
     () =>
       filterPullRequestList(
-        result.entries,
+        // Involved rows the main list has not reached yet join it, as on web.
+        involvedTargets.length === 0
+          ? result.entries
+          : [...result.entries, ...involvedList.entries],
         controls,
         result.data?.viewers ?? {},
         query,
         result.data.localSearchHosts,
         new Set(connectedKey.split("\n")),
       ),
-    [result.entries, controls, query, result.data, connectedKey],
+    [
+      result.entries,
+      involvedTargets,
+      involvedList.entries,
+      controls,
+      query,
+      result.data,
+      connectedKey,
+    ],
   );
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};

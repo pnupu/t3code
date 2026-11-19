@@ -435,17 +435,26 @@ export function PullRequestsPage() {
   }));
   const partitionsWanted = search.involvement === "all" && typedQuery.length === 0;
   // Only a server that stores the `involved` rule can hold a project on it, so older servers and
-  // feeds without the rule never get this read.
-  const involvedEnvironments = new Set(
-    scopedProjectId !== undefined
-      ? []
-      : projects.flatMap((project) =>
-          feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
-          "involved"
-            ? [project.environmentId]
-            : [],
-        ),
-  );
+  // feeds without the rule never get this read, and it reads only the projects on the rule.
+  const involvedProjects = new Map<EnvironmentId, ProjectId[]>();
+  if (scopedProjectId === undefined) {
+    for (const project of projects) {
+      if (
+        feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) !== "involved"
+      ) {
+        continue;
+      }
+      const held = involvedProjects.get(project.environmentId);
+      if (held === undefined) involvedProjects.set(project.environmentId, [project.id]);
+      else held.push(project.id);
+    }
+  }
+  const involvedQueries = environmentQueries.flatMap(({ environmentId, projectIds }) => {
+    const ruled = involvedProjects
+      .get(environmentId)
+      ?.filter((projectId) => projectIds === undefined || projectIds.includes(projectId));
+    return ruled === undefined || ruled.length === 0 ? [] : [{ environmentId, projectIds: ruled }];
+  });
   const partitionTargets = (() => {
     // The main list goes first. Besides putting the visible rows on screen sooner, it proves
     // which repositories the host search indexes, so an empty partition does not trigger the
@@ -473,10 +482,7 @@ export function PullRequestsPage() {
     return {
       authored: targetsFor("authored"),
       reviewing: targetsFor("reviewing"),
-      involved: targetsFor(
-        "involved",
-        environmentQueries.filter(({ environmentId }) => involvedEnvironments.has(environmentId)),
-      ),
+      involved: targetsFor("involved", involvedQueries),
     };
   })();
   const authoredQuery = usePullRequestHostList(partitionTargets.authored);
@@ -780,13 +786,42 @@ export function PullRequestsPage() {
   );
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
-  const involvedAnswer = partitionsWanted ? involvedQuery.data : null;
+  // The last full answer stays while a refresh travels, so Involving me rows do not jump.
+  const involvedKey = JSON.stringify(partitionTargets.involved);
+  const settledInvolved =
+    !involvedQuery.isPending && involvedQuery.error === null ? involvedQuery.data : null;
+  const [heldInvolved, setHeldInvolved] = useState<{
+    key: string;
+    answer: MergedPullRequestList;
+  } | null>(null);
+  if (
+    settledInvolved !== null &&
+    (heldInvolved?.key !== involvedKey || heldInvolved.answer !== settledInvolved)
+  ) {
+    setHeldInvolved({ key: involvedKey, answer: settledInvolved });
+  }
+  const involvedAnswer = !partitionsWanted
+    ? null
+    : (settledInvolved ?? (heldInvolved?.key === involvedKey ? heldInvolved.answer : null));
+  const shownInvolved = usePendingListEntries(overlayInput, involvedAnswer?.entries);
   const involved = pullRequestInvolvedMatcher(
-    involvedAnswer == null || involvedAnswer.errors.length > 0
+    involvedAnswer === null
       ? null
       : {
           entries: involvedAnswer.entries,
-          complete: involvedAnswer.truncatedEnvironments.length === 0,
+          slice: (environmentId, projectId) =>
+            !involvedQueries.some(
+              (query) =>
+                query.environmentId === environmentId &&
+                query.projectIds.some((id) => id === projectId),
+            ) ||
+            involvedAnswer.errors.some(
+              (error) => error.environmentId === environmentId && error.projectId === projectId,
+            )
+              ? "unknown"
+              : involvedAnswer.truncatedEnvironments.includes(environmentId)
+                ? "paged"
+                : "complete",
         },
   );
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -832,6 +867,7 @@ export function PullRequestsPage() {
           },
     authored: partitionsWanted && authoredQuery.data !== null ? shownAuthored : undefined,
     reviewing: partitionsWanted && reviewingQuery.data !== null ? shownReviewing : undefined,
+    involved: involvedAnswer === null ? undefined : shownInvolved,
     partitionsWanted,
     feed: {
       scopedToProject: scopedProjectId !== undefined,

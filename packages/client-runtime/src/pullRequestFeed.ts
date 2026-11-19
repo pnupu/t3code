@@ -85,25 +85,43 @@ export function pullRequestFeedShows(
   }
 }
 
+/** How far one project's `involved` read reaches: all of it, its first page, or nothing known. */
+export type PullRequestInvolvedSlice = "complete" | "paged" | "unknown";
+
+type InvolvedRow = {
+  readonly url: string;
+  readonly updatedAt: string;
+  readonly environmentId: string;
+  readonly projectId: string;
+};
+
 /**
  * Reads the host's `involved` listing for `PullRequestFeedOptions.involved`. A row it cannot rule
- * on counts as involved: with no answer yet, a failed read, or a row older than a listing that
- * stopped at a page, so the rule never hides a row the host would list.
+ * on counts as involved: with no answer, from a slice that was not read or failed, or not newer
+ * than the last row of its slice's page, so the rule never hides a row the host would list.
  */
 export function pullRequestInvolvedMatcher(
   answer: {
-    readonly entries: ReadonlyArray<{ readonly url: string; readonly updatedAt: string }>;
-    readonly complete: boolean;
+    readonly entries: ReadonlyArray<InvolvedRow>;
+    readonly slice: (environmentId: string, projectId: string) => PullRequestInvolvedSlice;
   } | null,
-): (entry: { readonly url: string; readonly updatedAt: string }) => boolean {
+): (entry: InvolvedRow) => boolean {
   if (answer === null) return () => true;
-  const urls = new Set(answer.entries.map((entry) => entry.url));
-  if (answer.complete) return (entry) => urls.has(entry.url);
-  let oldest: string | null = null;
+  const urls = new Set<string>();
+  const oldest = new Map<string, string>();
   for (const entry of answer.entries) {
-    if (oldest === null || entry.updatedAt < oldest) oldest = entry.updatedAt;
+    urls.add(entry.url);
+    const key = `${entry.environmentId} ${entry.projectId}`;
+    const held = oldest.get(key);
+    if (held === undefined || entry.updatedAt < held) oldest.set(key, entry.updatedAt);
   }
-  return (entry) => urls.has(entry.url) || oldest === null || entry.updatedAt < oldest;
+  return (entry) => {
+    if (urls.has(entry.url)) return true;
+    const slice = answer.slice(entry.environmentId, entry.projectId);
+    if (slice !== "paged") return slice === "unknown";
+    const boundary = oldest.get(`${entry.environmentId} ${entry.projectId}`);
+    return boundary === undefined || entry.updatedAt <= boundary;
+  };
 }
 
 type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefined;

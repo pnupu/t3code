@@ -1901,6 +1901,8 @@ export const ServerSettingsPatch = Schema.Struct({
         keepUnknownOverrideKeys(
           Schema.Struct({
             ...ProjectSettingsOverrides.fields,
+            // A write names a rule this server knows; only stored snapshots read unknown ones.
+            pullRequestFeed: Schema.optionalKey(Schema.UndefinedOr(PullRequestFeedRule)),
             sourceControlWritingStyle: Schema.optionalKey(SourceControlWritingStyleSettings),
           }),
         ),

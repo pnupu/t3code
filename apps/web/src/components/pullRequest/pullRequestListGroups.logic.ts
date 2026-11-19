@@ -43,6 +43,7 @@ export function pullRequestGroups({
   held,
   authored,
   reviewing,
+  involved,
   partitionsWanted,
   feed,
 }: {
@@ -60,6 +61,8 @@ export function pullRequestGroups({
   held: PullRequestPartitionsSnapshot | undefined;
   authored: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
   reviewing: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
+  /** The host's `involved` rows, added to the list like the authored and reviewing partitions. */
+  involved?: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
   partitionsWanted: boolean;
   /** Project feed rules and hidden pull requests; `hiddenCount` counts hidden rows in this view. */
   feed?: Omit<PullRequestFeedOptions<EnvironmentPullRequestEntry>, "involvement"> & {
@@ -115,7 +118,12 @@ export function pullRequestGroups({
     if (narrowedAuthored === undefined || narrowedReviewing === undefined) {
       return groupPullRequestsByInvolvement(searched, viewers);
     }
-    return partitionPullRequestsWithPriority(searched, narrowedAuthored, narrowedReviewing);
+    return partitionPullRequestsWithPriority(
+      searched,
+      narrowedAuthored,
+      narrowedReviewing,
+      narrow(involved),
+    );
   })();
 
   // lean: projects ruled "authored" or "reviewing" are still read by the main list, and their

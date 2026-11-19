@@ -348,6 +348,8 @@ export function usePullRequestList(targets: readonly ListTarget[]) {
     entries,
     error: errors.map((error) => error.message).join("\n") || null,
     isPending: sources.some(({ result }) => result.waiting) && !data.entries.length,
+    /** Every target has an answer, so an empty or short listing is that answer. */
+    answered: sources.every(({ pages }) => pages !== null),
     continued: data.continued,
     loadMore,
     onRefresh,

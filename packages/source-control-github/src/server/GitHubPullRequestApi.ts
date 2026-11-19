@@ -923,7 +923,6 @@ function matchesUnsortedListing(
   const reviewing =
     item.hasTeamReviewRequest ||
     item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer);
-  // The listing has no comments, mentions, or assignees, so `involved` keeps only what it can see.
   const matchesInvolvement =
     input.involvement === "all" ||
     (input.involvement === "authored"
@@ -1966,7 +1965,12 @@ export const make = Effect.gen(function* () {
       const listed = read(true).pipe(
         Effect.filterOrElse(
           (batch) => batch.items.length > 0 || input.cursor !== undefined || hasQuery,
-          () => read(false),
+          // The listing has no comments, mentions, or assignees, so it cannot rule on `involved`:
+          // an empty truncated page tells the caller to keep the rows it cannot rule on.
+          () =>
+            input.involvement === "involved"
+              ? Effect.succeed({ items: [], truncated: true, continues: false })
+              : read(false),
         ),
         Effect.filterOrElse(
           (batch) => !stacks || batch.items.length === 0,

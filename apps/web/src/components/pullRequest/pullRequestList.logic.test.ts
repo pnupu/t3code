@@ -369,6 +369,17 @@ describe("partitioning with the hosts' own priority reads", () => {
     expect(groups.map((group) => group.key)).toEqual(["authored", "others"]);
     expect(groups[1]!.entries.map((item) => item.number)).toEqual([2, 1]);
     expect(groups[0]!.entries.map((item) => item.number)).toEqual([3]);
+
+    // An involved row the list has not reached joins Others once, in recency order.
+    const mentioned = entry({ number: 4, updatedAt: "2026-07-05T12:00:00Z" });
+    const withInvolved = partitionPullRequestsWithPriority(
+      [newer, older, mine],
+      [mine],
+      [],
+      [mentioned, older, mine],
+    );
+    expect(withInvolved[1]!.entries.map((item) => item.number)).toEqual([2, 4, 1]);
+    expect(withInvolved[0]!.entries.map((item) => item.number)).toEqual([3]);
   });
 
   it("gives authored precedence over review-requested and orders partitions by recency", () => {

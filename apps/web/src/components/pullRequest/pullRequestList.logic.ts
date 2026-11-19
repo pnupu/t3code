@@ -452,6 +452,8 @@ export function partitionPullRequestsWithPriority<Entry extends PullRequestListE
   entries: ReadonlyArray<Entry>,
   authored: ReadonlyArray<Entry>,
   reviewRequested: ReadonlyArray<Entry>,
+  /** Rows the list may not have reached yet; they join Others. */
+  involved: ReadonlyArray<Entry> = [],
 ): ReadonlyArray<PullRequestGroup<Entry>> {
   // Matched by URL: each list may hold the pull request under a different environment.
   const authoredByKey = new Map(authored.map((entry) => [entry.url, entry]));
@@ -461,6 +463,14 @@ export function partitionPullRequestsWithPriority<Entry extends PullRequestListE
     ),
   );
   const others: Entry[] = [];
+  const listed = new Set(entries.map((entry) => entry.url));
+  const withInvolved = (rows: ReadonlyArray<Entry>) => {
+    const added = involved.filter(
+      (entry) =>
+        !listed.has(entry.url) && !authoredByKey.has(entry.url) && !reviewByKey.has(entry.url),
+    );
+    return added.length === 0 ? rows : [...rows, ...added].toSorted(comparePullRequestsByRecency);
+  };
   for (const entry of entries) {
     const key = entry.url;
     if (authoredByKey.has(key)) {
@@ -481,7 +491,7 @@ export function partitionPullRequestsWithPriority<Entry extends PullRequestListE
         key: "reviewRequested",
         entries: [...reviewByKey.values()].toSorted(comparePullRequestsByRecency),
       },
-      { key: "others", entries: others },
+      { key: "others", entries: withInvolved(others) },
     ] as const
   )
     .filter((group) => group.entries.length > 0)

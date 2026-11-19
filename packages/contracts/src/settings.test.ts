@@ -426,6 +426,17 @@ describe("ServerSettings pull request feed", () => {
     expect(settings.pullRequestFeed).toBe("all");
     expect(settings.projectSettingsOverrides[projectId]?.pullRequestFeed).toBeUndefined();
     expect(decodeServerSettings({ pullRequestFeed: "involved" }).pullRequestFeed).toBe("involved");
+    // A write keeps the strict rule, so a bad value fails instead of clearing the override.
+    expect(() =>
+      decodeServerSettingsPatch({
+        projectSettingsOverrides: { [projectId]: { pullRequestFeed: "starred" } },
+      }),
+    ).toThrow();
+    expect(
+      decodeServerSettingsPatch({
+        projectSettingsOverrides: { [projectId]: { pullRequestFeed: "involved" } },
+      }).projectSettingsOverrides?.[projectId],
+    ).toEqual({ pullRequestFeed: "involved" });
   });
 });
 
