@@ -1112,6 +1112,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["address bar duckduckgo google bing brave kagi ecosia custom url"],
   },
   {
+    id: "hidden-pull-requests",
+    title: "Hidden pull requests",
+    to: "/settings/diffs",
+    searchTerms: ["pr feed list hide unhide show excluded"],
+  },
+  {
     id: "pull-request-links-open-in-app",
     title: "Open pull requests in T3 Code",
     to: "/settings/diffs",
@@ -1147,6 +1153,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/source-control",
     scope: "project-defaults",
     searchTerms: ["pull request merge squash rebase last selected"],
+  },
+  {
+    id: "pull-request-feed",
+    title: "Pull request feed",
+    to: "/settings/source-control",
+    scope: "project-defaults",
+    searchTerms: ["pull requests list feed authored waiting on me review requested hide exclude"],
   },
   {
     id: "source-control",

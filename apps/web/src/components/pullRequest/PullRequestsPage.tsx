@@ -67,6 +67,8 @@ import { PullRequestCompactFilterMenu } from "./PullRequestCompactFilterMenu";
 import { INVOLVEMENT_TABS, SORT_OPTIONS, STATE_TABS } from "./pullRequestListOptions";
 import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
+import { usePullRequestFeed } from "./usePullRequestFeed";
+import { pullRequestRepositoryRules } from "@t3tools/client-runtime/pull-request-feed";
 import { pullRequestPanelReference } from "./usePullRequestDetail";
 import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
 import {
@@ -78,7 +80,7 @@ import {
 import { pullRequestGroups, pullRequestListEntryId } from "./pullRequestListGroups.logic";
 import { PullRequestListEmptyState } from "./PullRequestListEmptyState";
 import { PullRequestListGhost } from "./PullRequestGhosts";
-import { type PullRequestRowTarget } from "./PullRequestRow";
+import { type PullRequestRowMenu, type PullRequestRowTarget } from "./PullRequestRow";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { isCommandPaletteOpen } from "~/commandPaletteBus";
@@ -188,6 +190,7 @@ export function PullRequestsPage() {
   const [hostReads, setHostReads] = useState<ReadonlyMap<EnvironmentId, PullRequestHostRead>>(
     () => new Map(),
   );
+  const feed = usePullRequestFeed();
   const {
     capableEnvironments,
     scopedEnvironmentId,
@@ -207,7 +210,7 @@ export function PullRequestsPage() {
     linkedSelection,
     expectedHosts,
     projectsKnown,
-  } = usePullRequestScope(search, hostReads);
+  } = usePullRequestScope(search, hostReads, feed.hidesRepository);
   const rightPanelRef = capableEnvironments.length === 0 ? null : PULL_REQUESTS_PANEL_REF;
   const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(rightPanelRef);
   const rightPanelState = useRightPanelStore((state) =>
@@ -601,8 +604,10 @@ export function PullRequestsPage() {
     (sentQuery.length === 0 ? baselineQuery.data : undefined) ??
     (loaded?.scope === scopeKey ? loaded.data : null) ??
     narrowed;
-  const listData = answered ?? carried;
-  const showingCarried = answered === null && carried !== null;
+  // When feed rules leave every project out, nothing answers, so earlier rows must not stay.
+  const everyProjectLeftOut = environmentQueries.length === 0 && queryEnvironmentIds.length > 0;
+  const listData = everyProjectLeftOut ? null : (answered ?? carried);
+  const showingCarried = answered === null && listData !== null;
   const loadingMore = listQuery.isPending && listData !== null;
   const firstLoad = listQuery.isPending && listData === null;
 
@@ -752,10 +757,22 @@ export function PullRequestsPage() {
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  // Only copies in the list's scope: a row shows when any of their rules allows it.
+  const rulesFor = pullRequestRepositoryRules(
+    projects,
+    (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+    (project) => feed.ruleCounts(project.environmentId),
+    feed.ruleFor,
+  );
+  const showRowMenu: PullRequestRowMenu = useStableCallback((entry, openLabel, position) =>
+    feed.showRowMenu(entry, openLabel, position, projects),
+  );
   const {
-    entries,
     listedPullRequestTabStatuses,
     groups,
+    hiddenCount,
+    ruledOutCount,
     entriesByStatsKey,
     heldPullRequestsBySurface,
   } = pullRequestGroups({
@@ -783,7 +800,17 @@ export function PullRequestsPage() {
     authored: partitionsWanted && authoredQuery.data !== null ? shownAuthored : undefined,
     reviewing: partitionsWanted && reviewingQuery.data !== null ? shownReviewing : undefined,
     partitionsWanted,
+    feed: {
+      scopedToProject: scopedProjectId !== undefined,
+      rulesFor,
+      hidden: feed.hidden,
+      repositoryHidden: feed.repositoryHidden,
+      showHidden,
+    },
   });
+
+  // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
+  if (showHidden && feed.hidden.size === 0) setShowHidden(false);
 
   const visibleStatsKeys = useRef({ key: filterKey, values: new Set<string>() });
   const [statsByRow, setStatsByRow] = useState<PullRequestDiffStats>(() => new Map());
@@ -1267,7 +1294,10 @@ export function PullRequestsPage() {
             search.state !== "open" ||
             search.involvement !== "all" ||
             scopedProjectId !== undefined ||
-            search.host !== undefined
+            search.host !== undefined ||
+            hiddenCount > 0 ||
+            ruledOutCount > 0 ||
+            projects.some(feed.hidesRepository)
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={listData?.truncated === true && (canContinue || pageSize < MAX_PAGE_SIZE)}
@@ -1290,8 +1320,16 @@ export function PullRequestsPage() {
           closingKeys={closingKeys}
           sweepingKeys={closeSweepKeys}
           onCloseSweepStart={startCloseSweep}
+          onRowMenu={showRowMenu}
         />
       )}
+      {hiddenCount > 0 ? (
+        <div className="flex justify-center">
+          <Button size="xs" variant="ghost-muted" onClick={() => setShowHidden(!showHidden)}>
+            {showHidden ? `Hide ${hiddenCount} hidden` : `Show ${hiddenCount} hidden`}
+          </Button>
+        </div>
+      ) : null}
 
       {listError && shownCount > 0 ? (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning-surface px-3 py-2 text-xs">
@@ -1301,7 +1339,10 @@ export function PullRequestsPage() {
           </Button>
         </div>
       ) : null}
-      {listData?.truncated && entries.length > 0 ? (
+      {/* The error view replaces an emptied page, so it keeps this footer's way to more pages. */}
+      {pullRequestsSupported &&
+      listData?.truncated &&
+      (shownCount > 0 || (listError !== null && (canContinue || pageSize < MAX_PAGE_SIZE))) ? (
         <div className="flex justify-center py-3 text-xs text-muted-foreground">
           {loadingMore ? (
             <span className="flex items-center gap-2">

@@ -56,7 +56,8 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
   return scopedSettingsSource(targets, keys);
 }
 
-function useRunScopedPlan() {
+/** Runs a settings plan with the queued writer, pending echoes and failure toasts of Settings. */
+export function useRunScopedPlan() {
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
   return (
     environments: Parameters<typeof writeScopedSettings>[0],

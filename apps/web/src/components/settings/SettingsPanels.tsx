@@ -115,7 +115,9 @@ import { nativeLanguageName, SYSTEM_LANGUAGE } from "@t3tools/client-runtime/loc
 import { SUPPORTED_LOCALES } from "../../i18n/locales";
 import { BackgroundActivitySettingsRow } from "./BackgroundActivitySettings";
 import { AdvancedSettings } from "./AdvancedSettings";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { PullRequestLinksOpenInAppSetting } from "./IntegrationsSettings";
+import { usePullRequestFeed } from "../pullRequest/usePullRequestFeed";
 import { StorageCleanupSections } from "./StorageSettings";
 import { UpdateTrackSwitchDialog } from "./UpdateTrackSwitchDialog";
 import { environmentIdsKey } from "~/state/environmentAtomList";
@@ -1649,8 +1651,47 @@ export function DiffsSettingsPanel() {
           }
         />
         <PullRequestLinksOpenInAppSetting />
+        <HiddenPullRequestsSetting />
       </SettingsSection>
     </SettingsPageContainer>
+  );
+}
+
+function HiddenPullRequestsSetting() {
+  const { hiddenUrls, unhide, canUnhide, unhideBlockedBy } = usePullRequestFeed();
+  return (
+    <SettingsRow
+      {...searchableSetting("hidden-pull-requests")}
+      description={
+        hiddenUrls.length === 0
+          ? "None. Right-click a pull request in the Pull Requests list to hide it."
+          : "Pull requests you hid from the Pull Requests list."
+      }
+    >
+      {hiddenUrls.length === 0 ? null : (
+        <ul className="space-y-1 pb-2">
+          {hiddenUrls.toReversed().map((url) => {
+            const link = sourceControlClients.parseChangeRequestUrl(url)?.link;
+            return (
+              <li key={url} className="flex items-center justify-between gap-3 text-xs">
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {link ? `${link.repository} #${link.number}` : url}
+                  {unhideBlockedBy(url) === null ? null : ` · Hidden by ${unhideBlockedBy(url)}`}
+                </span>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={!canUnhide(url)}
+                  onClick={() => unhide(url)}
+                >
+                  Unhide
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SettingsRow>
   );
 }
 

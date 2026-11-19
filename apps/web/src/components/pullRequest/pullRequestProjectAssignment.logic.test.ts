@@ -159,6 +159,35 @@ describe("assignment query limits", () => {
         }),
       ).not.toThrow();
   });
+
+  it("names the projects a feed keeps once another project there is hidden", () => {
+    const projects = [project("a", "env-1", "x/a"), project("b", "env-1", "x/b")];
+    expect(pullRequestProjectQueries(projects, envs("env-1"))).toEqual([
+      { environmentId: "env-1" },
+    ]);
+    expect(
+      pullRequestProjectQueries(
+        projects,
+        envs("env-1"),
+        undefined,
+        undefined,
+        (candidate) => candidate.id === "b",
+      ),
+    ).toEqual([{ environmentId: "env-1", projectIds: ["a"] }]);
+    expect(
+      pullRequestProjectQueries(projects, envs("env-1"), undefined, undefined, () => true),
+    ).toEqual([]);
+    // Another environment's copy of the hidden repository must not take over its listing.
+    expect(
+      pullRequestProjectQueries(
+        [...projects, project("b2", "env-2", "x/b")],
+        envs("env-1", "env-2"),
+        undefined,
+        undefined,
+        (candidate) => candidate.id === "b",
+      ),
+    ).toEqual([{ environmentId: "env-1", projectIds: ["a"] }]);
+  });
 });
 
 describe("one server per repository", () => {

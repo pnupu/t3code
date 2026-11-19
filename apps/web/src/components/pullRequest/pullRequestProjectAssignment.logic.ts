@@ -181,12 +181,24 @@ export function pullRequestProjectQueries(
   environmentIds: ReadonlyArray<EnvironmentId>,
   hostAvailability?: PullRequestHostAvailability,
   unreachableEnvironmentIds?: ReadonlySet<EnvironmentId>,
+  /** Projects the feed leaves out entirely; their environment then lists the rest by id. */
+  excluded?: (project: AssignableProject) => boolean,
 ): ReadonlyArray<{
   readonly environmentId: EnvironmentId;
   readonly projectIds?: ReadonlyArray<ProjectId>;
 }> {
+  const kept = (() => {
+    if (excluded === undefined) return projects;
+    const hidden = projects.filter(excluded);
+    // Another environment's copy of a hidden repository would otherwise take over its listing.
+    const hiddenKeys = new Set(hidden.flatMap((project) => repositoryKey(project) ?? []));
+    return projects.filter((project) => {
+      const key = repositoryKey(project);
+      return !hidden.includes(project) && (key === undefined || !hiddenKeys.has(key));
+    });
+  })();
   const assignment = assignProjectsToEnvironments(
-    projects,
+    kept,
     environmentIds,
     environmentIds[0],
     hostAvailability,

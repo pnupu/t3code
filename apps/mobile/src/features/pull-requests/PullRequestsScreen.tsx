@@ -32,6 +32,14 @@ import {
 import { usePullRequestList } from "./usePullRequestList";
 import { usePullRequestListControls } from "./usePullRequestListControls";
 import { usePullRequestListActions } from "./usePullRequestListActions";
+import { usePullRequestFeed } from "./usePullRequestFeed";
+import {
+  isPullRequestHidden,
+  pullRequestFeedGroup,
+  pullRequestFeedVisibility,
+  pullRequestRepositoryHidden,
+  pullRequestRepositoryRules,
+} from "@t3tools/client-runtime/pull-request-feed";
 import {
   filterPullRequestList,
   pullRequestListFacets,
@@ -190,6 +198,39 @@ export function PullRequestsScreen(
       ),
     [result.entries, controls, query, result.data, connectedKey],
   );
+  const feed = usePullRequestFeed();
+  const [showHidden, setShowHidden] = useState(false);
+  const viewers = result.data?.viewers ?? {};
+  const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
+  // A pull request shows when any copy in the list's scope allows it, as on web.
+  const rulesFor = pullRequestRepositoryRules(
+    allProjects,
+    (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+    (project) =>
+      feed.ruleCounts(project.environmentId) &&
+      targets.some((target) => target.environmentId === project.environmentId),
+    feed.ruleFor,
+  );
+  const visibilities = entries.map((entry) =>
+    pullRequestFeedVisibility(
+      entry,
+      pullRequestFeedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`]),
+      {
+        scopedToProject: Boolean(controls.projectId),
+        involvement: controls.involvement,
+        rulesFor,
+        hidden: feed.hidden,
+        repositoryHidden,
+      },
+    ),
+  );
+  const hiddenCount = visibilities.filter((visibility) => visibility === "hidden").length;
+  // With nothing hidden anywhere, the next hide must not stay shown with no toggle to undo it.
+  if (showHidden && feed.hidden.size === 0) setShowHidden(false);
+  const feedEntries = entries.filter(
+    (_, index) =>
+      visibilities[index] === "shown" || (visibilities[index] === "hidden" && showHidden),
+  );
   const facets = pullRequestListFacets(result.entries);
   const [knownFacets, setKnownFacets] = useState({ environmentId, source: facets, ...facets });
   if (knownFacets.environmentId !== environmentId || knownFacets.source !== facets) {
@@ -261,8 +302,31 @@ export function PullRequestsScreen(
     <PullRequestListRow
       item={item}
       onSelect={selectPullRequest}
-      getActions={actions}
-      onAction={select}
+      getActions={(entry) => [
+        ...actions(entry),
+        ...(isPullRequestHidden(feed.hidden, entry.url)
+          ? feed.canUnhide(entry.url)
+            ? [{ id: "unhide", title: "Show in feed", image: "eye" }]
+            : feed.unhideBlockedBy(entry.url) === null
+              ? []
+              : [
+                  {
+                    id: "unhide",
+                    title: "Show in feed",
+                    subtitle: `Hidden by ${feed.unhideBlockedBy(entry.url)}`,
+                    image: "eye",
+                    attributes: { disabled: true },
+                  },
+                ]
+          : feed.canHide(entry.environmentId)
+            ? [{ id: "hide", title: "Hide from feed", image: "eye.slash" }]
+            : []),
+      ]}
+      onAction={(entry, action) => {
+        if (action === "hide") feed.hide(entry);
+        else if (action === "unhide") feed.unhide(entry.url);
+        else select(entry, action);
+      }}
       busy={busyKey === pullRequestKey(item)}
       selected={selectedKey === pullRequestKey(item)}
       sidebar={sidebar}
@@ -272,7 +336,7 @@ export function PullRequestsScreen(
     <View className={sidebar ? "flex-1 bg-drawer" : "flex-1 bg-screen"}>
       <LegendList
         ref={listRef}
-        data={entries}
+        data={feedEntries}
         extraData={`${selectedKey}:${busyKey}`}
         keyExtractor={pullRequestKey}
         itemsAreEqual={pullRequestListRowsAreEqual}
@@ -320,6 +384,16 @@ export function PullRequestsScreen(
         ListHeaderComponent={
           <>
             <PullRequestListFilters sidebar={sidebar} filters={filters} />
+            {hiddenCount > 0 ? (
+              <View className="items-center py-1">
+                <Button
+                  tone="text"
+                  size="compact"
+                  label={showHidden ? `Hide ${hiddenCount} hidden` : `Show ${hiddenCount} hidden`}
+                  onPress={() => setShowHidden((value) => !value)}
+                />
+              </View>
+            ) : null}
             {result.data?.errors.length ? (
               <View key={JSON.stringify(targets)}>
                 {result.data.errors.map((error) => (
