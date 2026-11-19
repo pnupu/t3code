@@ -5,6 +5,9 @@ import {
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
+  pullRequestFeedRuleRows,
+  pullRequestFeedRuleTargets,
+  type PullRequestFeedRuleRow,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
   pullRequestRepositoryRules,
@@ -12,6 +15,7 @@ import {
 import {
   AuthSettingsWriteScope,
   type ContextMenuItem,
+  isManagedSettingPath,
   type EnvironmentId,
   type ProjectId,
   type PullRequestFeedRule,
@@ -22,7 +26,7 @@ import { useStableCallback } from "~/hooks/useStableCallback";
 import { readLocalApi } from "~/localApi";
 import { useProjects } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
-import { readEnvironmentScope } from "~/state/session";
+import { useEnvironmentsWithScope } from "~/state/session";
 
 import {
   applyPendingScopedWrites,
@@ -30,6 +34,7 @@ import {
   pendingScopedWritesAtom,
   planEnvironmentSettingsPatch,
   planProjectOverridePatch,
+  planProjectOverridesClear,
 } from "../settings/scopedSettings";
 import { useRunScopedPlan } from "../settings/useScopedSettings";
 import { runPullRequestLinkAction } from "./pullRequestLinkContextMenu";
@@ -48,6 +53,8 @@ export function usePullRequestFeed() {
   const pendingWrites = useAtomValue(pendingScopedWritesAtom);
   const environments = applyPendingScopedWrites(known, pendingWrites);
   const runPlan = useRunScopedPlan();
+  // Subscribed, so a grant that loads after the first render unlocks its writes.
+  const writeGranted = useEnvironmentsWithScope(known, AuthSettingsWriteScope);
   const settingsOf = (environmentId: EnvironmentId) =>
     environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
       ?.settings;
@@ -61,8 +68,15 @@ export function usePullRequestFeed() {
   /** Older servers drop these settings, and a standard pairing cannot write settings. */
   const canWrite = (environmentId: EnvironmentId) =>
     environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
-      ?.environment.capabilities.pullRequestFeed === true &&
-    readEnvironmentScope(environmentId, AuthSettingsWriteScope);
+      ?.environment.capabilities.pullRequestFeed === true && writeGranted.has(environmentId);
+  /** A policy lock refuses the rule, project overrides included. */
+  const canWriteRule = (environmentId: EnvironmentId) =>
+    canWrite(environmentId) &&
+    !isManagedSettingPath(
+      environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
+        ?.managedPolicy,
+      "pullRequestFeed",
+    );
   const connected = new Set(
     environments.flatMap((environment) =>
       isConnectedWithConfig(environment) ? [environment.environmentId] : [],
@@ -129,15 +143,53 @@ export function usePullRequestFeed() {
     const key = repositoryKeyOf(own);
     if (key) {
       return scope.filter(
-        (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
+        (candidate) => repositoryKeyOf(candidate) === key && canWriteRule(candidate.environmentId),
       );
     }
-    return canWrite(own.environmentId) ? [own] : [];
+    return canWriteRule(own.environmentId) ? [own] : [];
   };
 
-  const setProjectRule = (members: ReturnType<typeof ruleMembers>, rule: PullRequestFeedRule) => {
+  const setProjectRule = (members: ReadonlyArray<ScopeProject>, rule: PullRequestFeedRule) => {
     runPlan(environments, (current) =>
       planProjectOverridePatch(current, members, { pullRequestFeed: rule }),
+    );
+  };
+
+  /** One row per repository in these environments, for the Settings overview. */
+  const ruleRows = (environmentIds: ReadonlyArray<EnvironmentId>) =>
+    pullRequestFeedRuleRows(
+      projects.filter((project) => environmentIds.includes(project.environmentId)),
+      (environmentId) => {
+        const environment = environments.find(
+          (candidate) => candidate.environmentId === environmentId,
+        );
+        const config = environment?.serverConfig;
+        if (!environment || !config) return undefined;
+        return {
+          label: environment.label,
+          settings: config.settings,
+          connected: connected.has(environmentId),
+          capable: config.environment.capabilities.pullRequestFeed === true,
+          writeGranted: writeGranted.has(environmentId),
+          managedPolicy: config.managedPolicy,
+        };
+      },
+    );
+  type RuleRow = PullRequestFeedRuleRow<ScopeProject>;
+  // A pick that changes no copy writes nothing, so it cannot pin inherited rules.
+  const setRowRule = (row: RuleRow, rule: PullRequestFeedRule) => {
+    const members = pullRequestFeedRuleTargets(row, rule);
+    if (members.length > 0) setProjectRule(members, rule);
+  };
+  const resetRowRule = (row: RuleRow) => {
+    const members = pullRequestFeedRuleTargets(row, null);
+    if (members.length === 0) return;
+    runPlan(environments, (current) =>
+      planProjectOverridesClear(
+        current,
+        members.map((project) => ({ environmentId: project.environmentId, projectId: project.id })),
+        ["pullRequestFeed"],
+      ),
     );
   };
 
@@ -198,7 +250,12 @@ export function usePullRequestFeed() {
       unhide(entry.url);
     } else {
       const picked = PULL_REQUEST_FEED_RULES.find((option) => action === `rule:${option.value}`);
-      if (picked) setProjectRule(members, picked.value);
+      // Like the Settings overview, a copy already on the rule keeps following its default.
+      const changed = members.filter(
+        (member) =>
+          ruleFor({ environmentId: member.environmentId, projectId: member.id }) !== picked?.value,
+      );
+      if (picked && changed.length > 0) setProjectRule(changed, picked.value);
     }
   };
 
@@ -217,5 +274,8 @@ export function usePullRequestFeed() {
     canUnhide,
     unhideBlockedBy,
     showRowMenu,
+    ruleRows,
+    setRowRule,
+    resetRowRule,
   };
 }

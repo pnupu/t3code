@@ -30,6 +30,7 @@ import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SourceControlSignInSection } from "./components/SourceControlSignInSection";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
+import { PullRequestFeedRulesSection } from "./components/PullRequestFeedRulesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import { useSettingsWriter } from "./useSettingsWriter";
 import {
@@ -181,14 +182,15 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const environmentMenu = useSettingsEnvironmentMenu();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { selectedTargets, projectGroups, selectedProjectKey } = useSettingsEnvironmentFilter();
+  const { selectedTargets, selectedIds, projectGroups, selectedProjectKey } =
+    useSettingsEnvironmentFilter();
   const selectedProject = projectGroups.find((group) => group.key === selectedProjectKey);
   const writableEnvironments = useEnvironmentsWithScope(selectedTargets, AuthSettingsWriteScope);
   const projectSelected = selectedProjectKey !== null;
-  const targets = resolveMobileSettingsTargets(
-    selectedTargets,
-    projectSelected ? (selectedProject?.members.map((member) => member.project) ?? []) : null,
-  );
+  const members = projectSelected
+    ? (selectedProject?.members.map((member) => member.project) ?? [])
+    : null;
+  const targets = resolveMobileSettingsTargets(selectedTargets, members);
   const [pendingWrites, setPendingWrites] = useState(0);
   const writeInFlight = useRef(false);
   // Closing views can save after controls disable; queue those patches behind the pending write.
@@ -234,7 +236,13 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     writeInFlight.current = true;
     setPendingTargets(targets);
     setPendingWrites((count) => count + 1);
-    void writeSettings(targets, writes).finally(() => {
+    void writeSettings(selectedTargets, (current) =>
+      planServerSettingsWrites(
+        resolveMobileSettingsTargets(current, members),
+        projectSelected,
+        patch,
+      ),
+    ).finally(() => {
       writeInFlight.current = false;
       setPendingTargets(null);
       setPendingWrites((count) => count - 1);
@@ -258,7 +266,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     writeInFlight.current = true;
     setPendingTargets(targets);
     setPendingWrites((count) => count + 1);
-    void writeSettings(targets, writes).finally(() => {
+    const keys = PAGE_PROJECT_KEYS[props.page];
+    void writeSettings(selectedTargets, (current) =>
+      planMobileScopedSettingsClear(resolveMobileSettingsTargets(current, members), keys),
+    ).finally(() => {
       writeInFlight.current = false;
       // Resending a draft over these pre-clear targets would undo the clear.
       queuedPatch.current = null;
@@ -295,11 +306,17 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
       >
         {!hasConnectedSelection || reference === null ? (
-          <Text className="px-2 text-base text-foreground-muted">
-            {projectSelected
-              ? "Select a project with a checkout on a connected environment."
-              : "Use the filter above to select a connected environment."}
-          </Text>
+          <>
+            <Text className="px-2 text-base text-foreground-muted">
+              {projectSelected
+                ? "Select a project with a checkout on a connected environment."
+                : "Use the filter above to select a connected environment."}
+            </Text>
+            {/* Cached rules stay readable; each row says what needs a connection. */}
+            {props.page === "source-control" && !projectSelected ? (
+              <PullRequestFeedRulesSection selectedIds={selectedIds} targets={selectedTargets} />
+            ) : null}
+          </>
         ) : (
           <>
             <ManagedPolicyNotice targets={targets} />
@@ -483,6 +500,12 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     ))}
                   </SettingsSection>
                 ) : null}
+                {projectSelected ? null : (
+                  <PullRequestFeedRulesSection
+                    selectedIds={selectedIds}
+                    targets={selectedTargets}
+                  />
+                )}
                 {projectSelected || feed.hiddenUrls.length === 0 ? null : (
                   <SettingsSection
                     title="Hidden pull requests"

@@ -36,10 +36,15 @@ vi.mock("react-native", () => ({
     </button>
   ),
 }));
-vi.mock("@effect/atom-react", () => ({
-  useAtomValue: () => AsyncResult.success({}),
-  useAtomSet: () => () => {},
-}));
+vi.mock("@effect/atom-react", async () => {
+  const { createContext } = await import("react");
+  return {
+    // The settings writer reads the cached configs, empty here.
+    RegistryContext: createContext({ get: () => new Map() }),
+    useAtomValue: () => AsyncResult.success({}),
+    useAtomSet: () => () => {},
+  };
+});
 vi.mock("../../state/preferences", () => ({
   mobilePreferencesAtom: {},
   updateMobilePreferencesAtom: {},
@@ -59,7 +64,10 @@ vi.mock("../../state/session", () => ({
         .filter((environmentId) => !mocks.readOnly.has(environmentId)),
     ),
 }));
-vi.mock("../../state/server", () => ({ serverEnvironment: { updateSettings: {} } }));
+vi.mock("../../state/server", () => ({
+  environmentServerConfigsAtom: {},
+  serverEnvironment: { updateSettings: {} },
+}));
 vi.mock("../pull-requests/usePullRequestFeed", () => ({
   usePullRequestFeed: () => ({
     hiddenUrls: [],
@@ -127,6 +135,9 @@ vi.mock("./components/SettingsSwitchRow", () => ({
   ),
 }));
 vi.mock("./components/SettingsRow", () => ({ SettingsRow: () => null }));
+vi.mock("./components/PullRequestFeedRulesSection", () => ({
+  PullRequestFeedRulesSection: () => null,
+}));
 vi.mock("./components/BranchNamingSettings", () => ({
   BranchNamingSettings: (props: { onChange: (patch: ServerSettingsPatch) => void }) => {
     mocks.branchNaming.onChange = props.onChange;
@@ -197,8 +208,11 @@ describe("SettingsServerControlsRouteScreen", () => {
     mocks.updateSettings.mockReturnValueOnce(pending.promise);
     act(() => root.render(<SettingsWorktreesRouteScreen />));
 
-    act(() => mocks.branchNaming.onChange({ branchNamingMode: "custom" }));
-    act(() => mocks.branchNaming.onChange({ branchNameInstructions: "Use issue IDs." }));
+    // Saves start on the settings writer's queue, a microtask after the change.
+    await act(async () => mocks.branchNaming.onChange({ branchNamingMode: "custom" }));
+    await act(async () =>
+      mocks.branchNaming.onChange({ branchNameInstructions: "Use issue IDs." }),
+    );
     expect(mocks.updateSettings).toHaveBeenCalledOnce();
 
     await act(async () => pending.resolve(AsyncResult.success(undefined)));
@@ -222,8 +236,8 @@ describe("SettingsServerControlsRouteScreen", () => {
         (button) => button.textContent === label,
       )!;
 
-    act(() => toggle("Agent browser access").click());
-    act(() => toggle("Auto-settle merged threads").click());
+    await act(async () => toggle("Agent browser access").click());
+    await act(async () => toggle("Auto-settle merged threads").click());
 
     // Both rewrite the whole project override, so a second write planned now would drop the first.
     expect(mocks.updateSettings).toHaveBeenCalledOnce();

@@ -10,6 +10,7 @@ import type { SettingsTarget } from "./settings-environment-filter";
 import {
   managedSettingReason,
   planMobileScopedSettingsClear,
+  planMobileFeedRuleReset,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
   uniformMobileSetting,
@@ -161,6 +162,46 @@ describe("mobile project settings scope", () => {
     expect(
       planMobileScopedSettingsPatch(targets, true, { enableProviderUpdateChecks: false }),
     ).toEqual([]);
+  });
+});
+
+describe("mobile feed rule reset", () => {
+  it("keeps a copy whose override has not shown up queued, and clears it once it has", () => {
+    const hidden: ServerSettings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      projectSettingsOverrides: {
+        [firstProject]: { pullRequestFeed: "hidden", defaultAutoPull: true },
+      },
+    };
+    const members = [
+      { environmentId: firstId, id: firstProject },
+      { environmentId: secondId, id: secondProject },
+    ];
+    const plan = (second: ServerSettings) =>
+      planMobileFeedRuleReset(
+        resolveMobileSettingsTargets(
+          [environment(firstId, hidden), environment(secondId, second)],
+          members,
+        ),
+      );
+    // The second server has not shown the earlier pick yet.
+    expect(plan({ ...DEFAULT_SERVER_SETTINGS, projectSettingsOverrides: {} })).toEqual([
+      {
+        environmentId: firstId,
+        patch: { projectSettingsOverrides: { [firstProject]: { defaultAutoPull: true } } },
+      },
+      { environmentId: secondId, patch: {} },
+    ]);
+    // Its queued save is planned again from the earlier save's response.
+    expect(
+      plan({
+        ...DEFAULT_SERVER_SETTINGS,
+        projectSettingsOverrides: { [secondProject]: { pullRequestFeed: "hidden" } },
+      })[1],
+    ).toEqual({
+      environmentId: secondId,
+      patch: { projectSettingsOverrides: { [secondProject]: null } },
+    });
   });
 });
 

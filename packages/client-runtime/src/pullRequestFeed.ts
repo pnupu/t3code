@@ -1,8 +1,10 @@
-import type {
-  ProjectId,
-  PullRequestFeedRule,
-  PullRequestInvolvement,
-  ServerSettings,
+import {
+  isManagedSettingPath,
+  type ManagedPolicySummary,
+  type ProjectId,
+  type PullRequestFeedRule,
+  type PullRequestInvolvement,
+  type ServerSettings,
 } from "@t3tools/contracts";
 
 export type PullRequestFeedSettings = Pick<
@@ -145,7 +147,10 @@ export function pullRequestRepositoryHidden<Project extends RepositoryProject>(
 type RepositoryProject = {
   readonly id: ProjectId;
   readonly environmentId: string;
-  readonly repositoryIdentity?: { readonly canonicalKey?: string | undefined } | null | undefined;
+  readonly repositoryIdentity?:
+    | { readonly canonicalKey?: string | undefined; readonly displayName?: string | undefined }
+    | null
+    | undefined;
 };
 
 /**
@@ -229,4 +234,187 @@ export function filterPullRequestFeed<
     return entries.length === 0 ? [] : [{ ...group, entries }];
   });
   return { groups: changed ? next : groups, hiddenCount, ruledOutCount };
+}
+
+/** Why this client cannot change a copy's rule, or `writable`. */
+export type PullRequestFeedRuleAccess =
+  | "writable"
+  | "disconnected"
+  | "outdated"
+  | "managed"
+  | "read-only";
+
+/** What an environment tells the overview about its copies. */
+export interface PullRequestFeedRuleEnvironment {
+  readonly label: string;
+  readonly settings: PullRequestFeedSettings;
+  readonly connected: boolean;
+  /** The server stores the rule; older ones drop it. */
+  readonly capable: boolean;
+  /** This connection holds the settings write grant there. */
+  readonly writeGranted: boolean;
+  readonly managedPolicy?:
+    | Pick<ManagedPolicySummary, "organization" | "lockedSettings">
+    | undefined;
+}
+
+export interface PullRequestFeedRuleCopy<Project> {
+  readonly project: Project;
+  readonly environmentLabel: string;
+  /** Null when the server cannot store a rule: its settings hold only a decoded fallback. */
+  readonly rule: PullRequestFeedRule | null;
+  /** False when the project inherits its environment's default rule, or the rule is unknown. */
+  readonly overridden: boolean;
+  readonly access: PullRequestFeedRuleAccess;
+  /** The organization whose policy locks the rule, when `access` is `managed`. */
+  readonly managedBy: string | null;
+}
+
+export interface PullRequestFeedRuleRow<Project> {
+  readonly key: string;
+  readonly name: string;
+  /** The project titles and environments the row covers. */
+  readonly covers: string;
+  readonly copies: ReadonlyArray<PullRequestFeedRuleCopy<Project>>;
+  /** The copies' one rule, or null when they differ or no copy's rule is known. */
+  readonly rule: PullRequestFeedRule | null;
+  /** False when every copy is on a server that cannot store the rule. */
+  readonly known: boolean;
+  /** Inheritance, disagreement, and the copies this client cannot change, in short sentences. */
+  readonly status: string;
+  readonly canReset: boolean;
+}
+
+const ruleLabel = (rule: PullRequestFeedRule) =>
+  PULL_REQUEST_FEED_RULES.find((option) => option.value === rule)?.label ?? rule;
+
+const ACCESS_NOTES: Record<
+  Exclude<PullRequestFeedRuleAccess, "writable" | "managed">,
+  (on: string) => string
+> = {
+  disconnected: (on) => `Connect ${on} to change it.`,
+  outdated: (on) => `Update ${on} to change it.`,
+  "read-only": (on) => `This connection cannot change settings on ${on}.`,
+};
+
+function pullRequestFeedRuleAccess(environment: PullRequestFeedRuleEnvironment): {
+  readonly access: PullRequestFeedRuleAccess;
+  readonly managedBy: string | null;
+} {
+  // Reconnecting an outdated server does not let it store the rule, so it needs the update first.
+  if (!environment.capable) return { access: "outdated", managedBy: null };
+  if (!environment.connected) return { access: "disconnected", managedBy: null };
+  // The server refuses a project override of a locked setting too.
+  if (isManagedSettingPath(environment.managedPolicy, "pullRequestFeed")) {
+    return { access: "managed", managedBy: environment.managedPolicy?.organization ?? null };
+  }
+  return { access: environment.writeGranted ? "writable" : "read-only", managedBy: null };
+}
+
+const unique = (values: ReadonlyArray<string>) => [...new Set(values)];
+
+/**
+ * One row per repository, keyed like `pullRequestRepositoryRules`, so a write covers every copy
+ * the feed reads. A project without a repository identity gets its own row. Environments without
+ * settings are left out: their rule is unknown.
+ */
+export function pullRequestFeedRuleRows<
+  Project extends RepositoryProject & {
+    readonly title: string;
+    readonly isScratch?: boolean | undefined;
+  },
+>(
+  projects: ReadonlyArray<Project>,
+  environmentOf: (
+    environmentId: Project["environmentId"],
+  ) => PullRequestFeedRuleEnvironment | undefined,
+): ReadonlyArray<PullRequestFeedRuleRow<Project>> {
+  const groups = new Map<string, { name: string; copies: PullRequestFeedRuleCopy<Project>[] }>();
+  for (const project of projects) {
+    // Scratch projects have no pull requests to show, as in the pull request project pickers.
+    if (project.isScratch) continue;
+    const environment = environmentOf(project.environmentId);
+    if (environment === undefined) continue;
+    const identity = project.repositoryIdentity;
+    const repositoryKey = identity?.canonicalKey?.toLowerCase();
+    const key = repositoryKey ?? `project ${project.environmentId} ${project.id}`;
+    const copy: PullRequestFeedRuleCopy<Project> = {
+      project,
+      environmentLabel: environment.label,
+      rule: environment.capable ? pullRequestFeedRule(environment.settings, project.id) : null,
+      overridden:
+        environment.capable &&
+        environment.settings.projectSettingsOverrides[project.id]?.pullRequestFeed !== undefined,
+      ...pullRequestFeedRuleAccess(environment),
+    };
+    const group = groups.get(key);
+    if (group) group.copies.push(copy);
+    else
+      groups.set(key, {
+        name: identity?.displayName ?? identity?.canonicalKey ?? project.title,
+        copies: [copy],
+      });
+  }
+  const rows = [...groups].map(([key, { name, copies }]) => {
+    const stored = copies.filter((copy) => copy.rule !== null);
+    const rules = [...new Set(stored.flatMap((copy) => (copy.rule === null ? [] : [copy.rule])))];
+    const rule = rules.length === 1 ? rules[0]! : null;
+    const notes: string[] = [];
+    // With no known rule there is nothing to compare; the access notes say why.
+    if (stored.length > 0 && rule === null) {
+      const parts = rules.map((candidate) => {
+        const on = unique(
+          stored.filter((copy) => copy.rule === candidate).map((copy) => copy.environmentLabel),
+        );
+        return `${ruleLabel(candidate)} on ${on.join(", ")}`;
+      });
+      notes.push(`Differs: ${parts.join("; ")}.`);
+    } else if (stored.length > 0 && stored.every((copy) => !copy.overridden)) {
+      notes.push("Default rule.");
+    }
+    for (const access of ["disconnected", "outdated", "read-only"] as const) {
+      const on = unique(
+        copies.filter((copy) => copy.access === access).map((copy) => copy.environmentLabel),
+      );
+      if (on.length > 0) notes.push(ACCESS_NOTES[access](on.join(", ")));
+    }
+    for (const organization of unique(
+      copies.flatMap((copy) => (copy.managedBy === null ? [] : [copy.managedBy])),
+    )) {
+      const on = unique(
+        copies
+          .filter((copy) => copy.managedBy === organization)
+          .map((copy) => copy.environmentLabel),
+      );
+      notes.push(`Managed by ${organization} on ${on.join(", ")}.`);
+    }
+    return {
+      key,
+      name,
+      covers: `${unique(copies.map((copy) => copy.project.title)).join(", ")} · ${unique(
+        copies.map((copy) => copy.environmentLabel),
+      ).join(", ")}`,
+      copies,
+      rule,
+      known: stored.length > 0,
+      status: notes.join(" "),
+      canReset: copies.some((copy) => copy.overridden && copy.access === "writable"),
+    };
+  });
+  return rows.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * The projects a pick writes: a rule goes to each writable copy not already on it, so a copy that
+ * inherits the rule keeps following the default; a reset (`null`) clears each writable override.
+ */
+export function pullRequestFeedRuleTargets<Project>(
+  row: Pick<PullRequestFeedRuleRow<Project>, "copies">,
+  rule: PullRequestFeedRule | null,
+): ReadonlyArray<Project> {
+  return row.copies.flatMap((copy) =>
+    copy.access === "writable" && (rule === null ? copy.overridden : copy.rule !== rule)
+      ? [copy.project]
+      : [],
+  );
 }
