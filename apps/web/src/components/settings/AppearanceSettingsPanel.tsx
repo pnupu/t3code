@@ -7,6 +7,7 @@ import {
   type ChatWidth,
   type HtmlPreviewWidth,
   type EffortDisplay,
+  type WeeklyUsageStyle,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
   MAX_GLASS_OPACITY,
@@ -94,6 +95,11 @@ const HTML_PREVIEW_WIDTH_LABELS: Record<HtmlPreviewWidth, string> = {
   chat: msg("Match chat", { $context: "HTML preview width" }),
   wide: CHAT_WIDTH_LABELS.wide,
   full: CHAT_WIDTH_LABELS.full,
+};
+
+const WEEKLY_USAGE_STYLE_LABELS: Record<WeeklyUsageStyle, string> = {
+  lines: "Lines",
+  rings: "Rings",
 };
 
 const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
@@ -353,6 +359,45 @@ export function AppearanceSettingsPanel() {
           }
         />
         <ThreadDetailsItemsRow />
+        <SettingsRow
+          {...searchableSetting("weekly-usage-style")}
+          description="Show weekly usage in the thread details card as lines or rings."
+          resetAction={
+            settings.threadDetailsWeeklyUsageStyle !==
+            DEFAULT_UNIFIED_SETTINGS.threadDetailsWeeklyUsageStyle ? (
+              <SettingResetButton
+                ariaLabel={gt("Reset weekly usage style to default")}
+                onClick={() =>
+                  updateSettings({
+                    threadDetailsWeeklyUsageStyle:
+                      DEFAULT_UNIFIED_SETTINGS.threadDetailsWeeklyUsageStyle,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.threadDetailsWeeklyUsageStyle}
+                onValueChange={(value) => {
+                  if (value === "lines" || value === "rings")
+                    updateSettings({ threadDetailsWeeklyUsageStyle: value });
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Weekly usage style">
+                  <SelectValue>
+                    {WEEKLY_USAGE_STYLE_LABELS[settings.threadDetailsWeeklyUsageStyle]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="lines">Lines (default)</SelectItem>
+                  <SelectItem value="rings">Rings</SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+          }
+        />
         <SettingsRow
           {...searchableSetting("effort-display")}
           description={gt(
