@@ -12,7 +12,7 @@ import { AppText as Text } from "../../../components/ui/AppText";
 import { Menu } from "../../../components/ui/Menu";
 import { useProjects } from "../../../state/entities";
 import { useEnvironments } from "../../../state/environments";
-import { readEnvironmentScope } from "../../../state/session";
+import { useEnvironmentsWithScope } from "../../../state/session";
 import {
   planMobileScopedSettingsClear,
   planMobileScopedSettingsPatch,
@@ -29,10 +29,13 @@ export function PullRequestFeedRulesSection(props: {
   readonly selectedIds: ReadonlySet<EnvironmentId> | null;
   readonly targets: readonly SettingsTarget[];
 }) {
-  const { environments } = useEnvironments();
+  const { environments, presentationById } = useEnvironments();
   const projects = useProjects();
   const writeSettings = useSettingsWriter();
-  const [pending, setPending] = useState(false);
+  const writable = useEnvironmentsWithScope(props.targets, AuthSettingsWriteScope);
+  // Until the server pushes the saved settings, the rows still show the old rule.
+  const [sentOver, setSentOver] = useState<typeof presentationById | null>(null);
+  const pending = sentOver !== null && sentOver === presentationById;
   const rows = pullRequestFeedRuleRows(
     projects.filter(
       (project) => props.selectedIds === null || props.selectedIds.has(project.environmentId),
@@ -51,7 +54,7 @@ export function PullRequestFeedRulesSection(props: {
             ? "disconnected"
             : config.environment.capabilities.pullRequestFeed !== true
               ? "outdated"
-              : readEnvironmentScope(environmentId, AuthSettingsWriteScope)
+              : writable.has(environmentId)
                 ? "writable"
                 : "read-only",
       };
@@ -63,7 +66,7 @@ export function PullRequestFeedRulesSection(props: {
   const pick = (row: Row, action: string) => {
     const reset = action === DEFAULT_ACTION;
     const rule = PULL_REQUEST_FEED_RULES.find((option) => option.value === action)?.value;
-    if (pending || (!reset && rule === undefined)) return;
+    if (pending || (!reset && (rule === undefined || rule === row.rule))) return;
     const members = row.copies.flatMap((copy) =>
       copy.access === "writable" && (!reset || copy.overridden) ? [copy.project] : [],
     );
@@ -72,14 +75,16 @@ export function PullRequestFeedRulesSection(props: {
       ? planMobileScopedSettingsClear(targets, ["pullRequestFeed"])
       : planMobileScopedSettingsPatch(targets, true, { pullRequestFeed: rule! });
     if (writes.length === 0) return;
-    setPending(true);
-    void writeSettings(targets, writes).finally(() => setPending(false));
+    setSentOver(presentationById);
+    void writeSettings(targets, writes).then((failed) => {
+      if (failed.length > 0) setSentOver(null);
+    });
   };
 
   return (
     <SettingsSection
       title="Repository feed rules"
-      footer="A rule picked here applies to every copy of the repository."
+      footer="A rule picked here applies to every copy of the repository that this connection can change."
     >
       {rows.map((row, index) => (
         <RuleRow
