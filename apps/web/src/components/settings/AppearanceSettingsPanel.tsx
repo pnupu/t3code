@@ -5,6 +5,7 @@ import {
   DEFAULT_UNIFIED_SETTINGS,
   type ChatWidth,
   type EffortDisplay,
+  type WeeklyUsageStyle,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
   MAX_GLASS_OPACITY,
@@ -86,6 +87,11 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
   wide: "Wide",
   full: "Full",
+};
+
+const WEEKLY_USAGE_STYLE_LABELS: Record<WeeklyUsageStyle, string> = {
+  lines: "Lines",
+  rings: "Rings",
 };
 
 const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
@@ -299,6 +305,45 @@ export function AppearanceSettingsPanel() {
           }
         />
         <ThreadDetailsItemsRow />
+        <SettingsRow
+          {...searchableSetting("weekly-usage-style")}
+          description="Show weekly usage in the thread details card as lines or rings."
+          resetAction={
+            settings.threadDetailsWeeklyUsageStyle !==
+            DEFAULT_UNIFIED_SETTINGS.threadDetailsWeeklyUsageStyle ? (
+              <SettingResetButton
+                label="weekly usage style"
+                onClick={() =>
+                  updateSettings({
+                    threadDetailsWeeklyUsageStyle:
+                      DEFAULT_UNIFIED_SETTINGS.threadDetailsWeeklyUsageStyle,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.threadDetailsWeeklyUsageStyle}
+                onValueChange={(value) => {
+                  if (value === "lines" || value === "rings")
+                    updateSettings({ threadDetailsWeeklyUsageStyle: value });
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Weekly usage style">
+                  <SelectValue>
+                    {WEEKLY_USAGE_STYLE_LABELS[settings.threadDetailsWeeklyUsageStyle]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="lines">Lines (default)</SelectItem>
+                  <SelectItem value="rings">Rings</SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+          }
+        />
         <SettingsRow
           {...searchableSetting("effort-display")}
           description="Show reasoning effort in the composer as its name, such as High, or as bars."

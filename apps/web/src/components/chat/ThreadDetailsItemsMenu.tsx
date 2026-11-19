@@ -3,7 +3,18 @@ import {
   updateClientSettings,
   useClientSettings,
 } from "../../hooks/useSettings";
-import { MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuItem, MenuSeparator } from "../ui/menu";
+import {
+  MenuCheckboxItem,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
+} from "../ui/menu";
 import {
   isDefaultThreadDetailsVisibility,
   resolveThreadDetailsVisibility,
@@ -15,6 +26,7 @@ import {
 /** Menu body that shows and hides thread details items. The card's context menu and Settings share it. */
 export function ThreadDetailsItemsMenuItems() {
   const visibility = useClientSettings(resolveThreadDetailsVisibility);
+  const weeklyUsageStyle = useClientSettings((settings) => settings.threadDetailsWeeklyUsageStyle);
   return (
     <>
       <MenuGroup>
@@ -34,6 +46,21 @@ export function ThreadDetailsItemsMenuItems() {
         ))}
       </MenuGroup>
       <MenuSeparator />
+      <MenuSub>
+        <MenuSubTrigger>Weekly usage style</MenuSubTrigger>
+        <MenuSubPopup>
+          <MenuRadioGroup
+            value={weeklyUsageStyle}
+            onValueChange={(value) => {
+              if (value === "lines" || value === "rings")
+                updateClientSettings({ threadDetailsWeeklyUsageStyle: value });
+            }}
+          >
+            <MenuRadioItem value="lines">Lines</MenuRadioItem>
+            <MenuRadioItem value="rings">Rings</MenuRadioItem>
+          </MenuRadioGroup>
+        </MenuSubPopup>
+      </MenuSub>
       <MenuItem
         disabled={isDefaultThreadDetailsVisibility(visibility)}
         onClick={() => updateClientSettings(RESET_THREAD_DETAILS_ITEMS)}

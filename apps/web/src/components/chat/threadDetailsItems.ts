@@ -13,7 +13,7 @@ export const THREAD_DETAILS_ITEMS = [
   { id: "lineage", label: "Lineage", defaultVisible: true },
   { id: "sideChats", label: "Side chats", defaultVisible: true },
   { id: "usage", label: "Usage limits", defaultVisible: false },
-  { id: "usageRings", label: "Weekly usage rings", defaultVisible: true },
+  { id: "usageRings", label: "Weekly usage", defaultVisible: true },
   { id: "context", label: "Context window", defaultVisible: false },
 ] as const;
 
