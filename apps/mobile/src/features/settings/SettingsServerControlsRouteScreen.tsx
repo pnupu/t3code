@@ -297,11 +297,17 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
       >
         {!hasConnectedSelection || reference === null ? (
-          <Text className="px-2 text-base text-foreground-muted">
-            {projectSelected
-              ? "Select a project with a checkout on a connected environment."
-              : "Use the filter above to select a connected environment."}
-          </Text>
+          <>
+            <Text className="px-2 text-base text-foreground-muted">
+              {projectSelected
+                ? "Select a project with a checkout on a connected environment."
+                : "Use the filter above to select a connected environment."}
+            </Text>
+            {/* Cached rules stay readable; each row says what needs a connection. */}
+            {props.page === "source-control" && !projectSelected ? (
+              <PullRequestFeedRulesSection selectedIds={selectedIds} targets={selectedTargets} />
+            ) : null}
+          </>
         ) : (
           <>
             <ManagedPolicyNotice targets={targets} />

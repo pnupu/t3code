@@ -14,6 +14,7 @@ import {
 import {
   AuthSettingsWriteScope,
   type ContextMenuItem,
+  isManagedSettingPath,
   type EnvironmentId,
   type ProjectId,
   type PullRequestFeedRule,
@@ -24,7 +25,7 @@ import { useStableCallback } from "~/hooks/useStableCallback";
 import { readLocalApi } from "~/localApi";
 import { useProjects } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
-import { readEnvironmentScope } from "~/state/session";
+import { useEnvironmentsWithScope } from "~/state/session";
 
 import {
   applyPendingScopedWrites,
@@ -51,6 +52,8 @@ export function usePullRequestFeed() {
   const pendingWrites = useAtomValue(pendingScopedWritesAtom);
   const environments = applyPendingScopedWrites(known, pendingWrites);
   const runPlan = useRunScopedPlan();
+  // Subscribed, so a grant that loads after the first render unlocks its writes.
+  const writeGranted = useEnvironmentsWithScope(known, AuthSettingsWriteScope);
   const settingsOf = (environmentId: EnvironmentId) =>
     environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
       ?.settings;
@@ -64,8 +67,15 @@ export function usePullRequestFeed() {
   /** Older servers drop these settings, and a standard pairing cannot write settings. */
   const canWrite = (environmentId: EnvironmentId) =>
     environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
-      ?.environment.capabilities.pullRequestFeed === true &&
-    readEnvironmentScope(environmentId, AuthSettingsWriteScope);
+      ?.environment.capabilities.pullRequestFeed === true && writeGranted.has(environmentId);
+  /** A policy lock refuses the rule, project overrides included. */
+  const canWriteRule = (environmentId: EnvironmentId) =>
+    canWrite(environmentId) &&
+    !isManagedSettingPath(
+      environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
+        ?.managedPolicy,
+      "pullRequestFeed",
+    );
   const connected = new Set(
     environments.flatMap((environment) =>
       isConnectedWithConfig(environment) ? [environment.environmentId] : [],
@@ -132,10 +142,10 @@ export function usePullRequestFeed() {
     const key = repositoryKeyOf(own);
     if (key) {
       return scope.filter(
-        (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
+        (candidate) => repositoryKeyOf(candidate) === key && canWriteRule(candidate.environmentId),
       );
     }
-    return canWrite(own.environmentId) ? [own] : [];
+    return canWriteRule(own.environmentId) ? [own] : [];
   };
 
   const setProjectRule = (members: ReturnType<typeof ruleMembers>, rule: PullRequestFeedRule) => {
@@ -157,13 +167,10 @@ export function usePullRequestFeed() {
         return {
           label: environment.label,
           settings: config.settings,
-          access: !connected.has(environmentId)
-            ? "disconnected"
-            : config.environment.capabilities.pullRequestFeed !== true
-              ? "outdated"
-              : readEnvironmentScope(environmentId, AuthSettingsWriteScope)
-                ? "writable"
-                : "read-only",
+          connected: connected.has(environmentId),
+          capable: config.environment.capabilities.pullRequestFeed === true,
+          writeGranted: writeGranted.has(environmentId),
+          managedPolicy: config.managedPolicy,
         };
       },
     );
