@@ -12,7 +12,8 @@ stable tag with the fork commits rebased on top, so it is force-pushed on every 
    re-signed with the fork's self-signed identity. It publishes `vX.Y.(Z*1000+n)`, so
    upstream `v0.1.4` becomes `0.1.4001`, `0.1.4002`, and so on. GitHub sometimes turns
    that workflow off (#34), so `fork-release-watch.yml` turns it on again and starts it for
-   an unreleased `main`, on each push and every 15 minutes.
+   an unreleased `main`, on each push and every 15 minutes. To pause releases, turn off
+   both workflows.
 3. The desktop app checks every 15 minutes and downloads a new release in the background;
    its restart button installs it and moves every connected server.
 
