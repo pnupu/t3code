@@ -135,6 +135,13 @@ export function createScopedSettingsWriter<
             settings === null ? null : plan(withSettings(environments, environmentId, settings));
           const write =
             replanned?.serverWrites.find((next) => next.environmentId === environmentId) ?? planned;
+          // A save kept queued only in case an earlier one needed a follow-up; nothing to send.
+          if (Object.keys(write.patch).length === 0) {
+            return {
+              write,
+              result: { _tag: "Success" as const, value: settings ?? write.previous },
+            };
+          }
           const result = await persistServer({ environmentId, input: { patch: write.patch } });
           const savedCopy = readSettings(environmentId);
           if (result._tag === "Success" && result.value !== undefined && savedCopy !== null) {

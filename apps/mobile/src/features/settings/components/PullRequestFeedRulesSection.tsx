@@ -16,7 +16,7 @@ import { useEnvironments } from "../../../state/environments";
 import { environmentServerConfigsAtom } from "../../../state/server";
 import { useEnvironmentsWithScope } from "../../../state/session";
 import {
-  planMobileScopedSettingsClear,
+  planMobileFeedRuleReset,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
 } from "../settings-scoped-server";
@@ -66,14 +66,18 @@ export function PullRequestFeedRulesSection(props: {
     const rule = PULL_REQUEST_FEED_RULES.find((option) => option.value === action)?.value;
     if (!reset && rule === undefined) return;
     const picked = reset ? null : rule!;
-    const members = pullRequestFeedRuleTargets(row, picked);
+    // A reset covers every writable copy: one may still have an earlier pick in flight.
+    const members =
+      picked === null
+        ? row.copies.flatMap((copy) => (copy.access === "writable" ? [copy.project] : []))
+        : pullRequestFeedRuleTargets(row, picked);
     if (members.length === 0) return;
     // The copies are chosen now; each save rebuilds their entries from the settings it starts
     // from, so a save queued behind another keeps that one's keys.
     void writeSettings(props.targets, (current) => {
       const targets = resolveMobileSettingsTargets(current, members);
       return picked === null
-        ? planMobileScopedSettingsClear(targets, ["pullRequestFeed"])
+        ? planMobileFeedRuleReset(targets)
         : planMobileScopedSettingsPatch(targets, true, { pullRequestFeed: picked });
     });
   };
