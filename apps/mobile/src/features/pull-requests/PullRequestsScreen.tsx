@@ -244,7 +244,9 @@ export function PullRequestsScreen(
   // The involved listing is a project's only source of Others rows, so it pages with the list.
   const loadMore = (retry?: boolean) => {
     void result.loadMore(retry);
-    if (involvedList.hasMore) void involvedList.loadMore(retry);
+    // A failed involved page is retried on the next request, since its error stops it otherwise.
+    if (involvedList.hasMore)
+      void involvedList.loadMore(retry || involvedList.loadMoreError !== null);
   };
   const connectedTargets = targets.filter((target) =>
     environments.some(
@@ -512,9 +514,11 @@ export function PullRequestsScreen(
                 accessibilityLabel="Loading more pull requests"
               />
             </View>
-          ) : result.loadMoreError ? (
+          ) : (result.loadMoreError ?? involvedList.loadMoreError) ? (
             <View className="items-center gap-2 px-8 py-4">
-              <Text className="text-xs text-foreground-muted">{result.loadMoreError}</Text>
+              <Text className="text-xs text-foreground-muted">
+                {result.loadMoreError ?? involvedList.loadMoreError}
+              </Text>
               <Button
                 label="Try again"
                 accessibilityLabel="Retry loading more pull requests"

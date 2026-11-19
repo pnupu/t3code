@@ -692,9 +692,11 @@ export function PullRequestsPage() {
     (environmentId) => nextCursors[environmentId] === undefined,
   );
   const canContinue = !showingCarried && Object.keys(nextCursors).length > 0;
-  const involvedTruncated = partitionsWanted && involvedQuery.data?.truncated === true;
+  // The involved read grows with every Load more, so the two lists cover the same span.
+  const involvedTruncated =
+    partitionsWanted && involvedQuery.data?.truncated === true && involvedPageSize < MAX_PAGE_SIZE;
   const loadMore = () => {
-    if (involvedTruncated) {
+    if (partitionTargets.involved.length > 0) {
       setInvolvedPage({
         key: filterKey,
         size: Math.min(involvedPageSize + PAGE_SIZE, MAX_PAGE_SIZE),
@@ -830,13 +832,23 @@ export function PullRequestsPage() {
   const involvedAnswer = involvedRead?.answer ?? null;
   const shownInvolved = usePendingListEntries(overlayInput, involvedAnswer?.entries);
   // A project's listing is ready once its environment answered without failing and the project
-  // itself was read without error; until then its rows show as under the All rule.
+  // itself was read without error; until then its rows show as under the All rule. At its largest
+  // page a truncated listing cannot reach older rows, so those show too.
+  const involvedFloor =
+    involvedRead?.answer.truncated === true && involvedPageSize >= MAX_PAGE_SIZE
+      ? involvedRead.answer.entries.reduce<string | null>(
+          (oldest, entry) =>
+            oldest === null || entry.updatedAt < oldest ? entry.updatedAt : oldest,
+          null,
+        )
+      : null;
   const involved = pullRequestInvolvedMatcher(
     involvedRead === null
       ? null
       : {
           entries: involvedRead.answer.entries,
           ready: (entry: EnvironmentPullRequestEntry) =>
+            (involvedFloor === null || entry.updatedAt >= involvedFloor) &&
             involvedRead.answered.includes(entry.environmentId) &&
             !involvedQuery.failed.includes(entry.environmentId) &&
             involvedQueries.some(
