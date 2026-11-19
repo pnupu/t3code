@@ -692,19 +692,19 @@ export function PullRequestsPage() {
     (environmentId) => nextCursors[environmentId] === undefined,
   );
   const canContinue = !showingCarried && Object.keys(nextCursors).length > 0;
-  // A grown read still in flight was grown because the last answer was truncated.
-  const involvedTruncated =
-    partitionsWanted &&
-    involvedPageSize < MAX_PAGE_SIZE &&
-    (involvedQuery.data?.truncated === true ||
-      (involvedQuery.data === null && involvedPageSize > PAGE_SIZE));
+  // The involved read grows with each Load more unless its latest answer is complete.
+  const involvedCanGrow =
+    partitionsWanted && partitionTargets.involved.length > 0 && involvedPageSize < MAX_PAGE_SIZE;
+  const involvedTruncated = involvedCanGrow && involvedQuery.data?.truncated === true;
   const loadMore = () => {
-    if (involvedTruncated) {
+    if (involvedCanGrow && involvedQuery.data?.truncated !== false) {
       setInvolvedPage({
         key: filterKey,
         size: Math.min(involvedPageSize + PAGE_SIZE, MAX_PAGE_SIZE),
       });
     }
+    // A complete main list is not read again when only the involved read has more.
+    if (listData?.truncated !== true) return;
     if (canContinue) {
       setPage({
         key: filterKey,
@@ -1405,7 +1405,7 @@ export function PullRequestsPage() {
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
           canLoadMore={
             (listData?.truncated === true || involvedTruncated) &&
-            (canContinue || pageSize < MAX_PAGE_SIZE)
+            (canContinue || pageSize < MAX_PAGE_SIZE || involvedTruncated)
           }
           loadingMore={loadingMore}
           onClearQuery={() => updateListScope({ q: undefined })}
@@ -1448,14 +1448,15 @@ export function PullRequestsPage() {
       {/* The error view replaces an emptied page, so it keeps this footer's way to more pages. */}
       {pullRequestsSupported &&
       (listData?.truncated === true || involvedTruncated) &&
-      (shownCount > 0 || (listError !== null && (canContinue || pageSize < MAX_PAGE_SIZE))) ? (
+      (shownCount > 0 ||
+        (listError !== null && (canContinue || pageSize < MAX_PAGE_SIZE || involvedTruncated))) ? (
         <div className="flex justify-center py-3 text-xs text-muted-foreground">
           {loadingMore ? (
             <span className="flex items-center gap-2">
               <Spinner aria-hidden size="sm" />
               {sentCursors === null ? "Updating pull requests" : "Loading more"}
             </span>
-          ) : canContinue || pageSize < MAX_PAGE_SIZE ? (
+          ) : canContinue || pageSize < MAX_PAGE_SIZE || involvedTruncated ? (
             <Button
               size="sm"
               variant="outline"
