@@ -416,6 +416,30 @@ describe("ServerSettings environment icon", () => {
   });
 });
 
+describe("ServerSettings pull request feed", () => {
+  it("reads a rule from a newer server as the default instead of failing the snapshot", () => {
+    const projectId = ProjectId.make("project-a");
+    const settings = decodeServerSettings({
+      pullRequestFeed: "starred",
+      projectSettingsOverrides: { [projectId]: { pullRequestFeed: "starred" } },
+    });
+    expect(settings.pullRequestFeed).toBe("all");
+    expect(settings.projectSettingsOverrides[projectId]?.pullRequestFeed).toBeUndefined();
+    expect(decodeServerSettings({ pullRequestFeed: "involved" }).pullRequestFeed).toBe("involved");
+    // A write keeps the strict rule, so a bad value fails instead of clearing the override.
+    expect(() =>
+      decodeServerSettingsPatch({
+        projectSettingsOverrides: { [projectId]: { pullRequestFeed: "starred" } },
+      }),
+    ).toThrow();
+    expect(
+      decodeServerSettingsPatch({
+        projectSettingsOverrides: { [projectId]: { pullRequestFeed: "involved" } },
+      }).projectSettingsOverrides?.[projectId],
+    ).toEqual({ pullRequestFeed: "involved" });
+  });
+});
+
 const decodeDeviceHostSettings = Schema.decodeSync(ServerSettings);
 
 // `deviceHosts` as it was decoded before Expo hosts existed: an SSH host needs a target.

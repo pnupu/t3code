@@ -919,6 +919,7 @@ function matchesUnsortedListing(
 ): boolean {
   const matchesState = input.state === "all" || item.state === input.state;
   const viewer = input.viewer.toLowerCase();
+  // `involved` never reaches this listing: `listPullRequests` does not fall back for it.
   const matchesInvolvement =
     input.involvement === "all" ||
     (input.involvement === "authored"
@@ -951,6 +952,7 @@ function searchQuery(input: {
     ...(input.state === "merged" ? ["is:merged"] : []),
     ...(input.involvement === "authored" ? [`author:${input.viewer}`] : []),
     ...(input.involvement === "reviewing" ? [`review-requested:${input.viewer}`] : []),
+    ...(input.involvement === "involved" ? [`involves:${input.viewer}`] : []),
     ...(query.length === 0 ? [] : [searchPhrase(query)]),
     ...(input.cursor === undefined ? [] : [`updated:<=${input.cursor.updatedBefore}`]),
     ...filterQualifiers(input.filters, input.viewer),
@@ -1959,7 +1961,21 @@ export const make = Effect.gen(function* () {
       const listed = read(true).pipe(
         Effect.filterOrElse(
           (batch) => batch.items.length > 0 || input.cursor !== undefined || hasQuery,
-          () => read(false),
+          // The listing has no comments, mentions, or assignees, so it cannot answer `involved`;
+          // the provider tells an empty answer from an unindexed repository.
+          // A truncated empty page has rows it could not hand over, and no cursor to reach them.
+          (batch) =>
+            input.involvement !== "involved"
+              ? read(false)
+              : batch.truncated
+                ? Effect.fail(
+                    new GitHubPullRequestReadError({
+                      cwd: input.cwd,
+                      operation: "listPullRequests",
+                      cause: new Error("The involved search stopped before its first row."),
+                    }),
+                  )
+                : Effect.succeed({ items: [], truncated: false, continues: false }),
         ),
         Effect.filterOrElse(
           (batch) => !stacks || batch.items.length === 0,

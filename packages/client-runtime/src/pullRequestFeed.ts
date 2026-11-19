@@ -18,10 +18,23 @@ export const PULL_REQUEST_FEED_RULES: ReadonlyArray<{
   readonly label: string;
 }> = [
   { value: "all", label: "All pull requests" },
+  { value: "involved", label: "Involving me" },
   { value: "reviewing", label: "Waiting on me" },
   { value: "authored", label: "Authored by me" },
   { value: "hidden", label: "Hidden" },
 ];
+
+/** The rules every server to write can store; servers without `pullRequestFeedInvolved` refuse it. */
+export function pullRequestFeedRuleOptions(
+  capabilities: Iterable<{ readonly pullRequestFeedInvolved?: boolean } | undefined>,
+): typeof PULL_REQUEST_FEED_RULES {
+  for (const capability of capabilities) {
+    if (capability?.pullRequestFeedInvolved !== true) {
+      return PULL_REQUEST_FEED_RULES.filter((option) => option.value !== "involved");
+    }
+  }
+  return PULL_REQUEST_FEED_RULES;
+}
 
 export function pullRequestFeedRule(
   settings: PullRequestFeedSettings | null | undefined,
@@ -42,11 +55,30 @@ export function pullRequestFeedGroup(
   return entry.viewerReviewRequested ? "reviewRequested" : "others";
 }
 
-/** A narrowed involvement tab holds one group of that kind, whatever its key says. */
+/**
+ * A row an authored or review-requested listing returned keeps that group even when its author
+ * login is not the viewer's: the host matched it another way, as GitCafe does by actor. The server
+ * already checks the rows of hosts that ignore those listings.
+ */
+export function pullRequestListedGroup(
+  entry: Parameters<typeof pullRequestFeedGroup>[0] & { readonly url: string },
+  viewer: string | null | undefined,
+  listed: { readonly authored: ReadonlySet<string>; readonly reviewing: ReadonlySet<string> },
+): PullRequestFeedGroup {
+  if (listed.authored.has(entry.url)) return "authored";
+  const own = pullRequestFeedGroup(entry, viewer);
+  return own === "others" && listed.reviewing.has(entry.url) ? "reviewRequested" : own;
+}
+
+/**
+ * A narrowed involvement tab holds one group of that kind, whatever its key says. `involved` says
+ * the host lists the viewer as taking part in an Others row, by a comment, mention, or assignment.
+ */
 export function pullRequestFeedShows(
   rule: PullRequestFeedRule,
   group: PullRequestFeedGroup,
   involvement: PullRequestInvolvement = "all",
+  involved = false,
 ): boolean {
   const kind =
     involvement === "authored"
@@ -59,11 +91,29 @@ export function pullRequestFeedShows(
       return true;
     case "hidden":
       return false;
+    case "involved":
+      return kind !== "others" || involved;
     case "authored":
       return kind === "authored";
     case "reviewing":
       return kind === "reviewRequested";
   }
+}
+
+/**
+ * For `PullRequestFeedOptions.involved`: a row is involved when its project's involved listing
+ * holds it. With no answer (a search, or no read), or for a project whose listing is not ready
+ * (not read, pending, failed, or unindexed), every row counts, as under the All rule.
+ */
+export function pullRequestInvolvedMatcher<Row extends { readonly url: string }>(
+  answer: {
+    readonly entries: ReadonlyArray<{ readonly url: string }>;
+    readonly ready: (entry: Row) => boolean;
+  } | null,
+): (entry: Row) => boolean {
+  if (answer === null) return () => true;
+  const urls = new Set(answer.entries.map((entry) => entry.url));
+  return (entry) => urls.has(entry.url) || !answer.ready(entry);
 }
 
 type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefined;
@@ -104,6 +154,8 @@ export interface PullRequestFeedOptions<Entry> {
   readonly hidden: ReadonlySet<string>;
   /** The row's own group, when the list may file it under another one. */
   readonly groupOf?: (entry: Entry) => PullRequestFeedGroup;
+  /** Whether the host's `involved` listing holds the row; absent counts only the row's group. */
+  readonly involved?: (entry: Entry) => boolean;
   /** A repository another environment's project hides, read before copies merge. */
   readonly repositoryHidden?: (entry: Entry) => boolean;
 }
@@ -191,9 +243,13 @@ export function pullRequestFeedVisibility<Entry extends { readonly url: string }
     const admitted =
       options.repositoryHidden?.(entry) !== true &&
       options.rulesFor(entry).some((rule) => {
-        if (pullRequestFeedShows(rule, group, options.involvement)) return true;
+        const involved = rule === "involved" && options.involved?.(entry) === true;
+        if (pullRequestFeedShows(rule, group, options.involvement, involved)) return true;
         ownGroup ??= options.groupOf?.(entry);
-        return ownGroup !== undefined && pullRequestFeedShows(rule, ownGroup, options.involvement);
+        return (
+          ownGroup !== undefined &&
+          pullRequestFeedShows(rule, ownGroup, options.involvement, involved)
+        );
       });
     if (!admitted) return "rule";
   }

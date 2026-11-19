@@ -1246,7 +1246,7 @@ export const ProjectSettingsOverrides = Schema.Struct({
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
   pullRequestMergeMethod: Schema.optionalKey(Schema.NullOr(PullRequestMergeMethod)),
-  pullRequestFeed: Schema.optionalKey(PullRequestFeedRule),
+  pullRequestFeed: ForwardCompatibleOptional(PullRequestFeedRule),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
@@ -1577,7 +1577,17 @@ export const ServerSettings = Schema.Struct({
   pullRequestMergeMethod: Schema.NullOr(PullRequestMergeMethod).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
-  pullRequestFeed: PullRequestFeedRule.pipe(Schema.withDecodingDefault(Effect.succeed("all"))),
+  /** A rule from a newer version reads as `all`, so one unknown value cannot fail the settings. */
+  pullRequestFeed: ForwardCompatibleNullable(PullRequestFeedRule).pipe(
+    Schema.decodeTo(
+      PullRequestFeedRule,
+      SchemaTransformation.transform({
+        decode: (rule) => rule ?? "all",
+        encode: (rule) => rule,
+      }),
+    ),
+    Schema.withDecodingDefault(Effect.succeed("all")),
+  ),
   hiddenPullRequests: HiddenPullRequests.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 
   // Schema.Unknown preserves unknown-driver configs across versions; see providerInstance.ts.
@@ -1902,6 +1912,8 @@ export const ServerSettingsPatch = Schema.Struct({
         keepUnknownOverrideKeys(
           Schema.Struct({
             ...ProjectSettingsOverrides.fields,
+            // A write names a rule this server knows; only stored snapshots read unknown ones.
+            pullRequestFeed: Schema.optionalKey(Schema.UndefinedOr(PullRequestFeedRule)),
             sourceControlWritingStyle: Schema.optionalKey(SourceControlWritingStyleSettings),
           }),
         ),

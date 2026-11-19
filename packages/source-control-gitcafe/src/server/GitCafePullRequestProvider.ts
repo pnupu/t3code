@@ -794,6 +794,9 @@ export const make = Effect.gen(function* () {
   const provider: PullRequestProviderApi = {
     kind: SourceControlProviderKind.make("gitcafe"),
     capabilities: CAPABILITIES,
+    // Without the principal the listing comes back unnarrowed. A narrowed review answer already
+    // names the viewer among reviewers; its authored answer matches by actor, not by login.
+    ignoresInvolvement: ["reviewing"],
     getViewer: (input) =>
       read(
         "getViewer",

@@ -214,9 +214,11 @@ export function mergeEnvironmentPullRequestPages(
 ) {
   const viewers: Record<string, string> = {};
   const localSearchHosts = new Set<string>();
+  const answered = new Set<string>();
   const entries: EnvironmentPullRequestListEntry[] = [];
   const errors = [];
   for (const { environmentId, pages } of sources) {
+    answered.add(environmentId);
     entries.push(...pages.entries.map((entry) => ({ ...entry, environmentId })));
     for (const [host, viewer] of Object.entries(pages.head.viewers))
       viewers[`${environmentId} ${host}`] = viewer;
@@ -228,6 +230,8 @@ export function mergeEnvironmentPullRequestPages(
     entries,
     viewers,
     localSearchHosts,
+    /** The environments that have an answer. */
+    answered,
     errors,
     continued: sources.some(({ pages }) => pages.continued),
   };

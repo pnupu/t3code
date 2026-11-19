@@ -30,7 +30,8 @@ const encodeJson = Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unkno
 
 export const PullRequestListControls = Schema.Struct({
   state: PullRequestListState,
-  involvement: PullRequestInvolvement,
+  // The `involved` listing only backs the feed rule; the list filter does not offer it.
+  involvement: PullRequestInvolvement.pick(["all", "reviewing", "authored"]),
   filters: PullRequestListFilters,
   projectId: Schema.optional(Schema.String),
   projectEnvironmentId: Schema.optional(Schema.String),

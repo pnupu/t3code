@@ -612,6 +612,8 @@ interface MergedEnvironmentQueryView<A> {
   readonly observations: ReadonlyArray<readonly [EnvironmentId, A, number]>;
   readonly values: ReadonlyArray<readonly [EnvironmentId, A]>;
   readonly error: EnvironmentQueryError | null;
+  /** Every environment whose read failed; `error` names only the first. */
+  readonly failed: ReadonlyArray<EnvironmentId>;
   readonly isPending: boolean;
 }
 
@@ -651,12 +653,14 @@ function createMergedEnvironmentQuery<Input, A>(
       const values: Array<readonly [EnvironmentId, A]> = [];
       const observations: Array<readonly [EnvironmentId, A, number]> = [];
       const pendingEnvironments = new Set<EnvironmentId>();
+      const failed: EnvironmentId[] = [];
       let error: EnvironmentQueryError | null = null;
       let isPending = false;
       for (const target of targets) {
         const result = get(atomFor(target));
         isPending ||= result.waiting;
         if (result.waiting) pendingEnvironments.add(target.environmentId);
+        if (result._tag === "Failure") failed.push(target.environmentId);
         if (result._tag === "Failure" && error === null) {
           error = {
             environmentId: target.environmentId,
@@ -677,6 +681,7 @@ function createMergedEnvironmentQuery<Input, A>(
       return {
         values,
         error,
+        failed,
         isPending,
         // Another batch can still find a readable checkout on this environment.
         observations: observations.filter(
@@ -689,6 +694,7 @@ function createMergedEnvironmentQuery<Input, A>(
     observations: [],
     values: [],
     error: null,
+    failed: [],
     isPending: false,
   }).pipe(Atom.withLabel(`${label}:empty`));
   return function useMergedQuery(targets: ReadonlyArray<EnvironmentQueryTarget<Input>>) {
@@ -749,6 +755,9 @@ export function usePullRequestTurnRefresh(environmentId: EnvironmentId): number 
 
 export interface MergedPullRequestListView {
   readonly data: MergedPullRequestList | null;
+  /** The environments whose answer `data` holds, and those whose latest read failed. */
+  readonly answered: ReadonlyArray<EnvironmentId>;
+  readonly failed: ReadonlyArray<EnvironmentId>;
   readonly error: EnvironmentQueryError | null;
   readonly isPending: boolean;
   readonly observations: ReadonlyArray<readonly [EnvironmentId, PullRequestListResult, number]>;
@@ -764,6 +773,8 @@ export function usePullRequestList(
   const data = mergePullRequestLists(query.values);
   return {
     data,
+    answered: query.values.map(([environmentId]) => environmentId),
+    failed: query.failed,
     error: query.error,
     isPending: query.isPending,
     observations: query.observations,
@@ -778,6 +789,8 @@ export function usePullRequestHostList(
   const data = mergePullRequestLists(query.values);
   return {
     data,
+    answered: query.values.map(([environmentId]) => environmentId),
+    failed: query.failed,
     error: query.error,
     isPending: query.isPending,
     observations: query.observations,

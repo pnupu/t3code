@@ -546,6 +546,8 @@ function withRateLimitBackoff(
       ? {}
       : { readsPublicHostWithoutCheckout: api.readsPublicHostWithoutCheckout }),
     ...(api.batchesReads === undefined ? {} : { batchesReads: api.batchesReads }),
+    ...(api.listsInvolved === undefined ? {} : { listsInvolved: api.listsInvolved }),
+    ...(api.ignoresInvolvement === undefined ? {} : { ignoresInvolvement: api.ignoresInvolvement }),
     getViewer:
       options?.viewerAllowsPause === true
         ? interactive("getViewer", api.getViewer)
@@ -1436,6 +1438,23 @@ export const make = Effect.gen(function* () {
     const cursorOf = (project: SupportedProject): ListCursor | undefined =>
       continuation?.get(project.cursorKey);
 
+    // A host that cannot narrow `involved` answers it with nothing: clients take that project's
+    // rows from its authored and review-requested partitions.
+    const skipsInvolved = (project: SupportedProject) =>
+      involvement === "involved" && project.api.listsInvolved !== true;
+    // A host that ignores `authored` or `reviewing` sends every row, so there a row stays only
+    // when its own author or review requests involve the viewer. Other hosts' rows stay as sent.
+    const keepsInvolvement = (
+      project: SupportedProject,
+      item: ProviderChangeRequest,
+      viewer: string,
+    ) =>
+      involvement === "authored" && project.api.ignoresInvolvement?.includes("authored")
+        ? item.author?.login.toLowerCase() === viewer.toLowerCase()
+        : involvement === "reviewing" && project.api.ignoresInvolvement?.includes("reviewing")
+          ? item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer.toLowerCase())
+          : true;
+
     const readSlice = (
       project: SupportedProject,
       cursor: ListCursor | undefined,
@@ -1443,6 +1462,15 @@ export const make = Effect.gen(function* () {
       {
         const viewer = viewers[project.host]!;
         const key = project.cursorKey;
+        if (skipsInvolved(project)) {
+          return Effect.succeed({
+            key,
+            entries: [],
+            errors: [],
+            truncated: false,
+            nextCursor: null,
+          });
+        }
         return project.api
           .listChangeRequests({
             cwd: project.project.workspaceRoot,
@@ -1482,7 +1510,11 @@ export const make = Effect.gen(function* () {
               return {
                 key,
                 entries: items
-                  .filter((item) => matchesRowFilters(item, input.filters, viewer))
+                  .filter(
+                    (item) =>
+                      matchesRowFilters(item, input.filters, viewer) &&
+                      keepsInvolvement(project, item, viewer),
+                  )
                   .map((item) => toEntry({ project, item, viewer, observedAt })),
                 errors: [],
                 truncated: page.truncated,
@@ -1553,7 +1585,7 @@ export const make = Effect.gen(function* () {
       const readAcross = first.api.listChangeRequestsAcross;
       const separately = () =>
         Effect.forEach(chunk, readRepository, { concurrency: REPOSITORY_CONCURRENCY });
-      if (readAcross === undefined) return separately();
+      if (readAcross === undefined || skipsInvolved(first)) return separately();
       const viewer = viewers[first.host]!;
       const cursor = cursorOf(first);
       return readAcross({
@@ -1616,7 +1648,11 @@ export const make = Effect.gen(function* () {
               return Effect.succeed({
                 key: project.cursorKey,
                 entries: items
-                  .filter((item) => matchesRowFilters(item, input.filters, viewer))
+                  .filter(
+                    (item) =>
+                      matchesRowFilters(item, input.filters, viewer) &&
+                      keepsInvolvement(project, item, viewer),
+                  )
                   .map((item) => toEntry({ project, item, viewer, observedAt })),
                 errors: [],
                 truncated: page.truncated,

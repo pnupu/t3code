@@ -289,6 +289,7 @@ export const make = Effect.gen(function* () {
     capabilities: CAPABILITIES,
     unavailableRequirement: UNAVAILABLE_REQUIREMENT,
     readsPublicHostWithoutCheckout: true,
+    ignoresInvolvement: ["authored", "reviewing"],
     getViewer,
     listChangeRequests: Effect.fn("ForgejoPullRequestProvider.listChangeRequests")(
       function* (input) {

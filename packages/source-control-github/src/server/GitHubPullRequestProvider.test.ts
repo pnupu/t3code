@@ -987,6 +987,37 @@ describe("listChangeRequestsAcross", () => {
     }),
   );
 
+  it.effect("answers an empty involved read only where search covers the repository", () =>
+    Effect.gen(function* () {
+      const provider = yield* make.pipe(
+        Effect.provide(
+          Layer.mock(GitHubPullRequestApi.GitHubPullRequestApi)({
+            listPullRequests: () =>
+              Effect.succeed({ items: [], truncated: false, continues: false }),
+            searchPullRequests: (search: Search) =>
+              Effect.succeed({
+                items: search.repositories[0] === "acme/web" ? [searched("acme/web")] : [],
+                truncated: false,
+              }),
+          }),
+        ),
+      );
+      const read = (repository: string) =>
+        provider.listChangeRequests({
+          cwd: "/w",
+          host: "github.com",
+          repository,
+          state: "open",
+          involvement: "involved",
+          viewer: "viewer",
+          limit: 50,
+        });
+      expect((yield* read("acme/web")).truncated).toBe(false);
+      // The caller files a failed read as one it cannot rule on.
+      expect((yield* Effect.flip(read("acme/renamed"))).reason).toBe("failed");
+    }),
+  );
+
   it.effect("leaves a repository search does not cover to be read on its own", () =>
     Effect.gen(function* () {
       const read = yield* providerAnswering({

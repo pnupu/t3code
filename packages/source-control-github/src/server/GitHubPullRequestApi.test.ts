@@ -1563,6 +1563,20 @@ layer("GitHubPullRequestApi.layer", (it) => {
         'is:pr is:closed is:unmerged review-requested:bilal "pull requests page" ' +
           "updated:<=2026-07-02T00:00:00Z sort:updated-desc repo:acme/web repo:pingdotgg/t3code",
       );
+
+      yield* cli.searchPullRequests({
+        cwd: "/w",
+        host: "github.com",
+        repositories: ["acme/web"],
+        state: "open",
+        involvement: "involved",
+        viewer: "bilal",
+        limit: 10,
+      });
+      assert.strictEqual(
+        searchQueryOfCall(1),
+        "is:pr is:open involves:bilal sort:updated-desc repo:acme/web",
+      );
     }),
   );
 
@@ -2196,6 +2210,46 @@ layer("GitHubPullRequestApi.layer", (it) => {
       expect(batch.items.map((item) => item.number)).toEqual([1, 2]);
       expect(searchOfCall(1)).toBeUndefined();
       assert.isFalse(batch.continues);
+
+      // The listing cannot see mentions or comments, so `involved` does not read it.
+      mockedExecute.mockReturnValueOnce(Effect.succeed(emptySearch()));
+      const involved = yield* cli.listPullRequests({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "github.com",
+        state: "open",
+        involvement: "involved",
+        viewer: "bilal",
+        limit: 10,
+      });
+      expect(involved).toMatchObject({ items: [], truncated: false, continues: false });
+      assert.strictEqual(mockedExecute.mock.calls.length, 3);
+
+      // An empty page that has rows it could not hand over cannot be continued, so it fails.
+      // Rows GitHub sent but this client cannot read still count toward the page.
+      mockedExecute.mockReturnValueOnce(
+        Effect.succeed(
+          output(
+            encodeJson({
+              data: {
+                search: { pageInfo: lastPage, nodes: Array.from({ length: 11 }, () => ({})) },
+              },
+            }),
+          ),
+        ),
+      );
+      const stopped = yield* Effect.flip(
+        cli.listPullRequests({
+          cwd: "/w",
+          repository: "acme/web",
+          host: "github.com",
+          state: "open",
+          involvement: "involved",
+          viewer: "bilal",
+          limit: 10,
+        }),
+      );
+      assert.strictEqual(stopped._tag, "GitHubPullRequestReadError");
     }),
   );
 

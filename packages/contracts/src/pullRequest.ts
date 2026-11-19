@@ -14,7 +14,8 @@ import {
 } from "./baseSchemas.ts";
 import { SourceControlProviderKind } from "./sourceControl.ts";
 
-export const PullRequestInvolvement = Schema.Literals(["all", "reviewing", "authored"]);
+/** `involved` also takes in pull requests the viewer is assigned to, mentioned in, or commented on. */
+export const PullRequestInvolvement = Schema.Literals(["all", "reviewing", "authored", "involved"]);
 export type PullRequestInvolvement = typeof PullRequestInvolvement.Type;
 
 export const PullRequestState = Schema.Literals(["open", "closed", "merged"]);
@@ -64,7 +65,13 @@ export const PullRequestMergeMethod = Schema.Literals([
 export type PullRequestMergeMethod = typeof PullRequestMergeMethod.Type;
 
 /** Which of a project's pull requests the combined Pull Requests feed shows. */
-export const PullRequestFeedRule = Schema.Literals(["all", "reviewing", "authored", "hidden"]);
+export const PullRequestFeedRule = Schema.Literals([
+  "all",
+  "involved",
+  "reviewing",
+  "authored",
+  "hidden",
+]);
 export type PullRequestFeedRule = typeof PullRequestFeedRule.Type;
 
 const HiddenPullRequestUrl = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048));

@@ -583,6 +583,7 @@ export const make = Effect.gen(function* () {
   const provider: PullRequestProviderApi = {
     kind: SourceControlProviderKind.make("cursor-origin"),
     capabilities: CAPABILITIES,
+    ignoresInvolvement: ["reviewing"],
 
     getViewer: Effect.fn("OriginPullRequestProvider.getViewer")(
       function* (input) {

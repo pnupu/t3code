@@ -1,4 +1,5 @@
 import { usePaneRole } from "../../components/ui/Pane";
+import { ProjectId } from "@t3tools/contracts";
 import { Button } from "../../components/ui/Button";
 import {
   applyPullRequestDraftFilterChange,
@@ -35,8 +36,9 @@ import { usePullRequestListActions } from "./usePullRequestListActions";
 import { usePullRequestFeed } from "./usePullRequestFeed";
 import {
   isPullRequestHidden,
-  pullRequestFeedGroup,
+  pullRequestListedGroup,
   pullRequestFeedVisibility,
+  pullRequestInvolvedMatcher,
   pullRequestRepositoryHidden,
   pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
@@ -89,6 +91,10 @@ function PullRequestListError(props: { readonly message: string }) {
     </Pressable>
   );
 }
+
+// lean: Involving me reads one page of each of its lists, the same 99 rows web reads, so older
+// involved pull requests stay hidden. Revisit if users need their older involved pull requests.
+const INVOLVED_LIST_LIMIT = 99;
 
 export function PullRequestsScreen(
   props: {
@@ -171,6 +177,84 @@ export function PullRequestsScreen(
     [environments, environmentId, configs, controls, query],
   );
   const result = usePullRequestList(targets);
+  const feed = usePullRequestFeed();
+  // As on web: only the projects on the `involved` rule read that listing, after the main list
+  // answers, and not while searching, when the rule shows every pull request.
+  const involvedProjectKey =
+    controls.projectId || controls.involvement !== "all" || query.trim().length > 0
+      ? ""
+      : allProjects
+          .flatMap((project) =>
+            feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
+            "involved"
+              ? [`${project.environmentId} ${project.id}`]
+              : [],
+          )
+          .join("\n");
+  const mainAnswered = result.entries.length > 0;
+  const involvedTargets = useMemo(() => {
+    if (!mainAnswered || involvedProjectKey === "") return [];
+    const ruled = involvedProjectKey.split("\n");
+    return targets.flatMap((target) => {
+      const projectIds = ruled.flatMap((key) => {
+        const [environmentId, projectId] = key.split(" ");
+        return environmentId === target.environmentId && projectId
+          ? [ProjectId.make(projectId)]
+          : [];
+      });
+      return projectIds.length === 0
+        ? []
+        : [
+            {
+              ...target,
+              input: {
+                ...target.input,
+                involvement: "involved" as const,
+                projectIds,
+                limit: INVOLVED_LIST_LIMIT,
+              },
+            },
+          ];
+    });
+  }, [mainAnswered, involvedProjectKey, targets]);
+  const involvedList = usePullRequestList(involvedTargets);
+  // As on web's partitions, the authored and review lists join the candidates: `involves:` leaves
+  // out a pull request only waiting on the viewer's review, and a host without `listsInvolved`
+  // answers `involved` with nothing. Each reads one page, as the involved list does.
+  const partitionTargets = useMemo(
+    () =>
+      (["authored", "reviewing"] as const).map((involvement) =>
+        involvedTargets.map((target) => ({ ...target, input: { ...target.input, involvement } })),
+      ),
+    [involvedTargets],
+  );
+  const authoredList = usePullRequestList(partitionTargets[0]!);
+  const reviewingList = usePullRequestList(partitionTargets[1]!);
+  // As on web: a project's listing is ready once its environment answered and the project was
+  // read without error; until then its rows show as under the All rule.
+  const involved = pullRequestInvolvedMatcher(
+    involvedTargets.length === 0
+      ? null
+      : {
+          entries: involvedList.entries,
+          ready: (entry: {
+            readonly url: string;
+            readonly environmentId: string;
+            readonly projectId: string;
+          }) =>
+            involvedList.data.answered.has(entry.environmentId) &&
+            involvedTargets.some(
+              (target) =>
+                target.environmentId === entry.environmentId &&
+                target.input.projectIds.some((id) => id === entry.projectId),
+            ) &&
+            !involvedList.data.errors.some(
+              (error) =>
+                error.environmentId === entry.environmentId &&
+                (!("projectId" in error) || error.projectId === entry.projectId),
+            ),
+        },
+  );
   const connectedTargets = targets.filter((target) =>
     environments.some(
       (environment) =>
@@ -189,16 +273,33 @@ export function PullRequestsScreen(
   const entries = useMemo(
     () =>
       filterPullRequestList(
-        result.entries,
+        // Involved rows the main list has not reached yet join it, as on web.
+        involvedTargets.length === 0
+          ? result.entries
+          : [
+              ...result.entries,
+              ...involvedList.entries,
+              ...authoredList.entries,
+              ...reviewingList.entries,
+            ],
         controls,
         result.data?.viewers ?? {},
         query,
         result.data.localSearchHosts,
         new Set(connectedKey.split("\n")),
       ),
-    [result.entries, controls, query, result.data, connectedKey],
+    [
+      result.entries,
+      involvedTargets,
+      involvedList.entries,
+      authoredList.entries,
+      reviewingList.entries,
+      controls,
+      query,
+      result.data,
+      connectedKey,
+    ],
   );
-  const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
   const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
@@ -211,16 +312,24 @@ export function PullRequestsScreen(
       targets.some((target) => target.environmentId === project.environmentId),
     feed.ruleFor,
   );
+  const listedGroups = useMemo(
+    () => ({
+      authored: new Set(authoredList.entries.map((entry) => entry.url)),
+      reviewing: new Set(reviewingList.entries.map((entry) => entry.url)),
+    }),
+    [authoredList.entries, reviewingList.entries],
+  );
   const visibilities = entries.map((entry) =>
     pullRequestFeedVisibility(
       entry,
-      pullRequestFeedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`]),
+      pullRequestListedGroup(entry, viewers[`${entry.environmentId} ${entry.host}`], listedGroups),
       {
         scopedToProject: Boolean(controls.projectId),
         involvement: controls.involvement,
         rulesFor,
         hidden: feed.hidden,
         repositoryHidden,
+        involved,
       },
     ),
   );
@@ -349,7 +458,12 @@ export function PullRequestsScreen(
         refreshControl={
           <RefreshControl
             refreshing={result.refreshing}
-            onRefresh={() => void result.onRefresh()}
+            onRefresh={() => {
+              result.onRefresh();
+              involvedList.onRefresh();
+              authoredList.onRefresh();
+              reviewingList.onRefresh();
+            }}
             // The list already accounts for the navigation header in its content inset.
             progressViewOffset={Platform.OS === "ios" ? 60 : undefined}
           />

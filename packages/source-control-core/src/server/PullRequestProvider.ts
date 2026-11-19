@@ -338,6 +338,13 @@ export interface PullRequestProviderApi {
   /** Concurrent summary reads share requests, so callers may keep many in flight. */
   readonly batchesReads?: boolean;
   /**
+   * Narrows `involved` on the host, comments and mentions included. Other providers answer
+   * `involved` with nothing; clients use the authored and review-requested reads instead.
+   */
+  readonly listsInvolved?: boolean;
+  /** Listings it answers with every row although the caller asked for them narrowed. */
+  readonly ignoresInvolvement?: ReadonlyArray<"authored" | "reviewing">;
+  /**
    * Absent means every host detected as this kind is read. A host it refuses is listed as one that
    * cannot be browsed here, and nothing is sent for it.
    */

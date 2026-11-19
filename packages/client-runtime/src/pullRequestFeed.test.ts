@@ -1,5 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
-import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProjectId,
+  type PullRequestFeedRule,
+  type PullRequestInvolvement,
+} from "@t3tools/contracts";
 
 import {
   filterPullRequestFeed,
@@ -13,6 +18,8 @@ import {
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
+  pullRequestInvolvedMatcher,
+  pullRequestListedGroup,
   type PullRequestFeedGroup,
 } from "./pullRequestFeed.ts";
 
@@ -20,7 +27,7 @@ const projectA = ProjectId.make("project-a");
 const projectB = ProjectId.make("project-b");
 
 describe("pull request feed rules", () => {
-  it.each<[PullRequestFeedRule, PullRequestFeedGroup, "all" | "authored" | "reviewing", boolean]>([
+  it.each<[PullRequestFeedRule, PullRequestFeedGroup, PullRequestInvolvement, boolean, boolean?]>([
     ["all", "others", "all", true],
     ["hidden", "authored", "all", false],
     ["authored", "authored", "all", true],
@@ -33,8 +40,29 @@ describe("pull request feed rules", () => {
     ["authored", "others", "reviewing", false],
     ["reviewing", "others", "reviewing", true],
     ["reviewing", "others", "authored", false],
-  ])("%s shows a %s row under %s: %s", (rule, group, involvement, shown) => {
-    expect(pullRequestFeedShows(rule, group, involvement)).toBe(shown);
+    ["involved", "authored", "all", true],
+    ["involved", "reviewRequested", "all", true],
+    ["involved", "others", "all", false],
+    // The host's involved listing holds the row: a comment, mention, or assignment.
+    ["involved", "others", "all", true, true],
+    ["involved", "others", "authored", true],
+  ])("%s shows a %s row under %s: %s", (rule, group, involvement, shown, involved) => {
+    expect(pullRequestFeedShows(rule, group, involvement, involved)).toBe(shown);
+  });
+
+  it("takes an involved project's rows only from its listing, unless it is not ready", () => {
+    const row = (projectId: string, url: string) => ({ projectId, url });
+    // A search, or no read: every row counts, as under the All rule.
+    expect(pullRequestInvolvedMatcher(null)(row("web", "https://h/a/1"))).toBe(true);
+    const involved = pullRequestInvolvedMatcher({
+      entries: [row("web", "https://h/a/1")],
+      ready: (entry: { readonly url: string; readonly projectId: string }) =>
+        entry.projectId !== "failed",
+    });
+    expect(involved(row("web", "https://h/a/1"))).toBe(true);
+    expect(involved(row("web", "https://h/a/2"))).toBe(false);
+    // A failed, pending, or unindexed listing shows the project's rows.
+    expect(involved(row("failed", "https://h/b/1"))).toBe(true);
   });
 
   it("resolves a project override over the environment rule", () => {
@@ -53,6 +81,14 @@ describe("pull request feed rules", () => {
     expect(pullRequestFeedGroup(entry, "me")).toBe("authored");
     expect(pullRequestFeedGroup(entry, "someone")).toBe("reviewRequested");
     expect(pullRequestFeedGroup({ ...entry, viewerReviewRequested: false }, null)).toBe("others");
+    // GitCafe lists a synced pull request as authored by actor, under a login not the viewer's.
+    const synced = {
+      url: "https://h/a/1",
+      author: { login: "github-me" },
+      viewerReviewRequested: false,
+    };
+    const listed = { authored: new Set([synced.url]), reviewing: new Set<string>() };
+    expect(pullRequestListedGroup(synced, "cafe-me", listed)).toBe("authored");
   });
 
   it("applies project rules to the combined feed and hides pull requests in every view", () => {
@@ -90,11 +126,15 @@ describe("pull request feed rules", () => {
     });
   });
 
-  it.each<[string, PullRequestFeedRule, PullRequestFeedGroup, PullRequestFeedGroup, boolean]>([
+  it.each<
+    [string, PullRequestFeedRule, PullRequestFeedGroup, PullRequestFeedGroup, boolean, boolean?]
+  >([
     ["admits a row its own group admits", "authored", "others", "authored", true],
     ["admits a row its list group admits", "reviewing", "reviewRequested", "others", true],
     ["drops a row neither group admits", "authored", "others", "reviewRequested", false],
-  ])("%s", (_, rule, listGroup, ownGroup, shown) => {
+    ["admits an Others row the host lists as involved", "involved", "others", "others", true, true],
+    ["drops an Others row the host does not list", "involved", "others", "others", false, false],
+  ])("%s", (_, rule, listGroup, ownGroup, shown, involved) => {
     expect(
       pullRequestFeedVisibility({ url: "https://h/a/1" }, listGroup, {
         scopedToProject: false,
@@ -102,6 +142,7 @@ describe("pull request feed rules", () => {
         rulesFor: () => [rule],
         hidden: new Set(),
         groupOf: () => ownGroup,
+        involved: () => involved === true,
       }),
     ).toBe(shown ? "shown" : "rule");
   });

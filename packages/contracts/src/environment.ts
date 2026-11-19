@@ -119,6 +119,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   projectSettingsOverrides: Schema.optionalKey(Schema.Boolean),
   /** Stores `pullRequestFeed` and `hiddenPullRequests`; older servers drop them. */
   pullRequestFeed: Schema.optionalKey(Schema.Boolean),
+  /** Stores the `involved` feed rule and lists `involved` pull requests; hide the rule where absent. */
+  pullRequestFeedInvolved: Schema.optionalKey(Schema.Boolean),
   /** Hide the switch when absent; older servers silently drop per-project provider patches. */
   projectProviderInstanceOverrides: Schema.optionalKey(Schema.Boolean),
   threadSnooze: Schema.optionalKey(Schema.Boolean),

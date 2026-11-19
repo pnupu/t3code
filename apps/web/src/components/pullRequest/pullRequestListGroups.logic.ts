@@ -43,6 +43,7 @@ export function pullRequestGroups({
   held,
   authored,
   reviewing,
+  involved,
   partitionsWanted,
   feed,
 }: {
@@ -60,6 +61,8 @@ export function pullRequestGroups({
   held: PullRequestPartitionsSnapshot | undefined;
   authored: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
   reviewing: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
+  /** The host's `involved` rows, added to the list like the authored and reviewing partitions. */
+  involved?: ReadonlyArray<EnvironmentPullRequestEntry> | undefined;
   partitionsWanted: boolean;
   /** Project feed rules and hidden pull requests; `hiddenCount` counts hidden rows in this view. */
   feed?: Omit<PullRequestFeedOptions<EnvironmentPullRequestEntry>, "involvement"> & {
@@ -113,9 +116,26 @@ export function pullRequestGroups({
     const narrowedAuthored = narrow(partitionsWanted ? (authored ?? held?.authored) : undefined);
     const narrowedReviewing = narrow(partitionsWanted ? (reviewing ?? held?.reviewing) : undefined);
     if (narrowedAuthored === undefined || narrowedReviewing === undefined) {
-      return groupPullRequestsByInvolvement(searched, viewers);
+      // The involved rows still join while an authored or reviewing read has no answer.
+      const listed = new Set(searched.map((entry) => entry.url));
+      const added = (narrow(involved) ?? []).filter((entry) => !listed.has(entry.url));
+      return groupPullRequestsByInvolvement(
+        added.length === 0
+          ? searched
+          : [...searched, ...added].toSorted(comparePullRequestsByRecency),
+        viewers,
+      );
     }
-    return partitionPullRequestsWithPriority(searched, narrowedAuthored, narrowedReviewing);
+    // Rows only the involved listing brings join the group their own author and requests give.
+    const extra = narrow(involved) ?? [];
+    const groupOfExtra = (entry: EnvironmentPullRequestEntry) =>
+      pullRequestFeedGroup(entry, pullRequestEntryViewer(entry, viewers));
+    return partitionPullRequestsWithPriority(
+      searched,
+      [...narrowedAuthored, ...extra.filter((entry) => groupOfExtra(entry) === "authored")],
+      [...narrowedReviewing, ...extra.filter((entry) => groupOfExtra(entry) === "reviewRequested")],
+      extra.filter((entry) => groupOfExtra(entry) === "others"),
+    );
   })();
 
   // lean: projects ruled "authored" or "reviewing" are still read by the main list, and their

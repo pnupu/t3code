@@ -2639,6 +2639,69 @@ it.effect("shares one cold viewer lookup across distinct concurrent lists", () =
   }),
 );
 
+it.effect("reads `involved` only from a host that narrows it", () =>
+  Effect.gen(function* () {
+    for (const listsInvolved of [false, true]) {
+      const asked: string[] = [];
+      const service = yield* makeService({
+        projects: [
+          project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        ],
+        providers: [
+          fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+            ...(listsInvolved ? { listsInvolved } : {}),
+            getViewer: () => Effect.succeed("bilal"),
+            listChangeRequests: (input) =>
+              Effect.sync(() => {
+                asked.push(input.involvement);
+                return {
+                  items: [changeRequest(1, "2026-07-03T00:00:00Z")],
+                  truncated: false,
+                  continues: true,
+                };
+              }),
+          }),
+        ],
+      });
+
+      const result = yield* service.list({ state: "open", involvement: "involved" });
+
+      assert.deepStrictEqual(asked, listsInvolved ? ["involved"] : []);
+      assert.strictEqual(result.entries.length, listsInvolved ? 1 : 0);
+    }
+  }),
+);
+
+it.effect("keeps a host's own narrowing and checks it only where the host ignores it", () =>
+  Effect.gen(function* () {
+    // `octocat` wrote the row, not the viewer: only a host that ignores `authored` drops it, and a
+    // host that matched it another way, as GitCafe does by actor, keeps it.
+    for (const ignores of [false, true]) {
+      const service = yield* makeService({
+        projects: [
+          project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        ],
+        providers: [
+          fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+            ...(ignores ? { ignoresInvolvement: ["authored", "reviewing"] as const } : {}),
+            getViewer: () => Effect.succeed("bilal"),
+            listChangeRequests: () =>
+              Effect.succeed({
+                items: [changeRequest(1, "2026-07-03T00:00:00Z")],
+                truncated: false,
+                continues: true,
+              }),
+          }),
+        ],
+      });
+
+      const authored = yield* service.list({ state: "open", involvement: "authored" });
+
+      assert.strictEqual(authored.entries.length, ignores ? 0 : 1);
+    }
+  }),
+);
+
 it.effect("a listing narrowed to some projects is its own cache entry", () =>
   Effect.gen(function* () {
     const asked: ReadonlyArray<string>[] = [];
