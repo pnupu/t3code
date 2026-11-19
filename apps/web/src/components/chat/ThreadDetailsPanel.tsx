@@ -31,7 +31,7 @@ import {
   ThreadDetailsUsage,
   type ThreadDetailsUsageInput,
 } from "./ThreadDetailsUsage";
-import { ThreadDetailsUsageRings } from "./ThreadDetailsUsageRings";
+import { ThreadDetailsWeeklyUsage } from "./ThreadDetailsWeeklyUsage";
 import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
 import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDetailsItems";
 import { useClientSettings } from "../../hooks/useSettings";
@@ -96,6 +96,7 @@ interface ThreadDetailsPanelProps extends Pick<
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
   const visible = useClientSettings(resolveThreadDetailsVisibility);
+  const weeklyUsageStyle = useClientSettings((settings) => settings.threadDetailsWeeklyUsageStyle);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const fileScripts = useT3ProjectFileScripts(
     props.environmentId,
@@ -142,9 +143,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
       threadRef={{ environmentId: props.environmentId, threadId: props.threadId }}
       anchor={props.anchor}
       handle={props.handle}
-      contentKey={THREAD_DETAILS_ITEMS.filter((item) => visible[item.id])
+      // Lines and rings differ in height, so a style change must re-measure the card's density.
+      contentKey={`${THREAD_DETAILS_ITEMS.filter((item) => visible[item.id])
         .map((item) => item.id)
-        .join(",")}
+        .join(",")}:${weeklyUsageStyle}`}
       onContextMenu={(event) => {
         // Popups the card opens bubble here through React; they, fields, links, and selected text
         // keep their own menus.
@@ -287,7 +289,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
               {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
 
-              {visible.usageRings ? <ThreadDetailsUsageRings /> : null}
+              {visible.usageRings ? <ThreadDetailsWeeklyUsage /> : null}
 
               {visible.context && props.usage.contextWindow ? (
                 <ThreadDetailsContext usage={props.usage.contextWindow} />
