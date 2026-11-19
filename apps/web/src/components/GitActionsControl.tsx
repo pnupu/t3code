@@ -853,8 +853,8 @@ export function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  onClick={() => {
-                    void openLink(publishResult.repository.url).catch(() => undefined);
+                  onClick={(event) => {
+                    void openLink(publishResult.repository.url, { event }).catch(() => undefined);
                   }}
                 >
                   Open on {publishProviderLabel}
