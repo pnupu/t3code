@@ -274,18 +274,16 @@ export function useOpenPrLink(threadRef?: ScopedThreadRef) {
     const openInBrowser = shouldOpenPullRequestExternally(event);
     const isAnchor =
       event.currentTarget instanceof HTMLAnchorElement && event.currentTarget.href.length > 0;
-    // Native links handle system-browser clicks; buttons and in-app targets still need openLink.
-    if (
+    const opensInApp =
       openInBrowser &&
-      isAnchor &&
       resolveLinkTarget({
         url: prUrl,
         event,
         settings: linkTargetSettings,
         canOpenIn: (target) => canOpenLinkIn(targetThreadRef ?? threadRef, target),
-      }) === "system"
-    )
-      return false;
+      }) !== "system";
+    // Native links handle system-browser clicks; buttons and in-app targets still need openLink.
+    if (openInBrowser && isAnchor && !opensInApp) return false;
 
     event.preventDefault();
     if (!openInBrowser && openChangeRequest(event, prUrl, targetThreadRef)) return true;
@@ -300,6 +298,6 @@ export function useOpenPrLink(threadRef?: ScopedThreadRef) {
         }),
       );
     });
-    return false;
+    return opensInApp;
   };
 }

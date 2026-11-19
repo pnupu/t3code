@@ -32,6 +32,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 
@@ -626,8 +627,8 @@ export const PullRequestSummaryTab = memo(function PullRequestSummaryTab({
   ];
 
   const openLink = useOpenLink(threadRef);
-  const openCheck = (url: string) => {
-    void openLink(url).catch((error: unknown) => {
+  const openCheck = (url: string, event: MouseEvent<HTMLElement>) => {
+    void openLink(url, { event }).catch((error: unknown) => {
       console.error(error);
       toastManager.add({ type: "error", title: m(msg("Unable to open check details")) });
     });
@@ -1120,7 +1121,7 @@ export const PullRequestSummaryTab = memo(function PullRequestSummaryTab({
                     <button
                       type="button"
                       disabled={!check.url}
-                      onClick={() => check.url && openCheck(check.url)}
+                      onClick={(event) => check.url && openCheck(check.url, event)}
                       className={cn(
                         "flex min-w-0 flex-1 items-start gap-2 rounded-md px-2 py-2 text-left text-xs leading-5 [&>svg]:mt-0.5",
                         check.url ? "cursor-pointer" : "cursor-default",

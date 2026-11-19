@@ -48,6 +48,7 @@ import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { shortcutConflictKey } from "~/keybindings";
 import { useOpenIssueLink } from "~/lib/openIssueLink";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
+import { readLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
 
@@ -377,23 +378,27 @@ export function HtmlRenderDocument(props: {
   const openChangeRequestLink = useOpenChangeRequestLink(props.threadRef);
   const openIssueLink = useOpenIssueLink(props.threadRef);
   const openLink = useOpenLink(props.threadRef);
-  const open = useEffectEvent(
-    (url: string, modifiers: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }) => {
-      const event = {
-        ...modifiers,
-        preventDefault: () => undefined,
-        stopPropagation: () => undefined,
-      };
-      if (
-        props.threadRef !== undefined &&
-        (openChangeRequestLink(event, url, undefined, props.threadRef.environmentId) ||
-          openIssueLink(event, url, props.threadRef.environmentId))
-      ) {
-        return;
-      }
-      void openLink(url, { event: modifiers }).catch((cause: unknown) => console.error(cause));
-    },
-  );
+  const open = useEffectEvent((url: string, modifiers: { metaKey: boolean; ctrlKey: boolean }) => {
+    if (modifiers.metaKey || modifiers.ctrlKey) {
+      void readLocalApi()
+        ?.shell.openExternal(url)
+        .catch((cause: unknown) => console.error(cause));
+      return;
+    }
+    const event = {
+      ...modifiers,
+      preventDefault: () => undefined,
+      stopPropagation: () => undefined,
+    };
+    if (
+      props.threadRef !== undefined &&
+      (openChangeRequestLink(event, url, undefined, props.threadRef.environmentId) ||
+        openIssueLink(event, url, props.threadRef.environmentId))
+    ) {
+      return;
+    }
+    void openLink(url, { event: modifiers }).catch((cause: unknown) => console.error(cause));
+  });
   const { onFullscreenChange } = props;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reports fullscreen to the parent while the image viewer is open, and clears it on unmount
   useEffect(() => {
