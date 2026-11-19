@@ -110,7 +110,7 @@ export function usePullRequestFeed() {
     );
   };
 
-  // Like Settings' project scope, every counted copy of the repository gets the rule.
+  // Like Settings' project scope, every writable copy gets the rule; a disconnected one warns.
   const ruleMembers = (project: { environmentId: EnvironmentId; projectId: ProjectId }) => {
     const repositoryKeyOf = (candidate: (typeof projects)[number] | undefined) =>
       candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
@@ -122,10 +122,10 @@ export function usePullRequestFeed() {
     );
     if (key) {
       return projects.filter(
-        (candidate) => repositoryKeyOf(candidate) === key && ruleCounts(candidate.environmentId),
+        (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
       );
     }
-    return ruleCounts(project.environmentId)
+    return canWrite(project.environmentId)
       ? [{ id: project.projectId, environmentId: project.environmentId }]
       : [];
   };
