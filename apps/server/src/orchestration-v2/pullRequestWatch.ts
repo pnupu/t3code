@@ -155,8 +155,10 @@ export function evaluatePullRequestWatch(
     // An empty or missing list is no baseline, as it is saved the same way.
     const known = finishedChecks ?? [];
     const finishedGrew = known.length > 0 && finishedNow.some((name) => !known.includes(name));
+    // A read whose approval lookup failed still saw these checks, so a finish since then is news.
+    const sawChecks = watch.awaitingBaseline === "checks" && known.length > 0;
     if (
-      !checksBaseline &&
+      (!checksBaseline || sawChecks) &&
       newlyFailed.length === 0 &&
       failed.length > 0 &&
       allDone &&
