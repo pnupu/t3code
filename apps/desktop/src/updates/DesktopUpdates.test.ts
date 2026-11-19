@@ -259,8 +259,14 @@ describe("DesktopUpdates", () => {
     ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
   });
 
-  it.effect("checks shortly after startup and then every four hours", () => {
-    const harness = makeHarness();
+  it.effect("checks every 15 minutes and downloads what it finds", () => {
+    let published: string | undefined;
+    const harness = makeHarness({
+      checkForUpdates: Effect.sync(() => {
+        if (published) harness.emit("update-available", { version: published });
+      }),
+      downloadUpdate: Effect.sync(() => harness.emit("update-downloaded", { version: published })),
+    });
 
     return Effect.scoped(
       Effect.gen(function* () {
@@ -269,12 +275,23 @@ describe("DesktopUpdates", () => {
 
         yield* TestClock.adjust("15 seconds");
         assert.equal(harness.checkCount(), 1);
+        assert.equal(harness.downloadCount(), 0);
 
-        yield* TestClock.adjust("3 hours");
+        yield* TestClock.adjust("14 minutes");
         assert.equal(harness.checkCount(), 1);
 
-        yield* TestClock.adjust("1 hour");
+        published = "1.2.4";
+        yield* TestClock.adjust("1 minute");
+        yield* flushCallbacks;
         assert.equal(harness.checkCount(), 2);
+        assert.equal(harness.downloadCount(), 1);
+        assert.equal((yield* updates.getState).status, "downloaded");
+
+        // A downloaded release is not fetched again.
+        yield* TestClock.adjust("15 minutes");
+        yield* flushCallbacks;
+        assert.equal(harness.checkCount(), 3);
+        assert.equal(harness.downloadCount(), 1);
       }),
     ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
   });
