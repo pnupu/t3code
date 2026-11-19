@@ -7,7 +7,6 @@ import {
   pullRequestFeedRule,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
-  pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   AuthSettingsWriteScope,
@@ -34,7 +33,6 @@ import {
 import { useRunScopedPlan } from "../settings/useScopedSettings";
 import { runPullRequestLinkAction } from "./pullRequestLinkContextMenu";
 import type { EnvironmentPullRequestEntry } from "./pullRequestList.logic";
-import type { PullRequestRowMenu } from "./PullRequestRow";
 
 type FeedMenuAction =
   | "copy-link"
@@ -111,14 +109,7 @@ export function usePullRequestFeed() {
     );
   };
 
-  const rowRules = pullRequestRepositoryRules(
-    projects,
-    (project) => ruleFor({ environmentId: project.environmentId, projectId: project.id }),
-    (project) => ruleCounts(project.environmentId),
-    ruleFor,
-  );
-
-  // Like Settings' project scope, every writable copy of the repository gets the rule.
+  // Like Settings' project scope, every counted copy of the repository gets the rule.
   const ruleMembers = (project: { environmentId: EnvironmentId; projectId: ProjectId }) => {
     const repositoryKeyOf = (candidate: (typeof projects)[number] | undefined) =>
       candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
@@ -130,10 +121,10 @@ export function usePullRequestFeed() {
     );
     if (key) {
       return projects.filter(
-        (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
+        (candidate) => repositoryKeyOf(candidate) === key && ruleCounts(candidate.environmentId),
       );
     }
-    return canWrite(project.environmentId)
+    return ruleCounts(project.environmentId)
       ? [{ id: project.projectId, environmentId: project.environmentId }]
       : [];
   };
@@ -152,11 +143,11 @@ export function usePullRequestFeed() {
     entry: EnvironmentPullRequestEntry,
     openLabel: string,
     position: { readonly x: number; readonly y: number },
+    rules: ReadonlyArray<PullRequestFeedRule>,
   ) => {
     const api = readLocalApi();
     if (!api) return;
     const isHidden = isPullRequestHidden(hidden, entry.url);
-    const rules = rowRules(entry);
     const writable = canWrite(entry.environmentId);
     const items: ContextMenuItem<FeedMenuAction>[] = [
       { id: "copy-link", label: "Copy link", icon: "copy" },
@@ -201,8 +192,8 @@ export function usePullRequestFeed() {
     }
   };
 
-  const showRowMenu: PullRequestRowMenu = useStableCallback((entry, openLabel, position) => {
-    void openRowMenu(entry, openLabel, position);
+  const showRowMenu = useStableCallback((...args: Parameters<typeof openRowMenu>) => {
+    void openRowMenu(...args);
   });
 
   return {
