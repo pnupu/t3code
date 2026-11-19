@@ -31,6 +31,7 @@ import {
 } from "~/rightPanelStore";
 
 import { resolveBrowserDefaults } from "./browserDefaults";
+import { type InAppLinkTarget, previewRuntimeForLinkTarget } from "./browserLinkTarget";
 
 export const isBrowserPreviewFile = (path: string): boolean =>
   /\.(?:html?|pdf)$/i.test(path.split(/[?#]/, 1)[0] ?? "");
@@ -62,6 +63,7 @@ export async function openUrlInPreview<E>(input: {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly profileId?: PreviewOpenInput["profileId"];
   readonly background?: boolean;
+  readonly target?: InAppLinkTarget;
 }): Promise<AtomCommandResult<void, E | BrowserSettingsReadError>> {
   // Read before any await: a side chat pane that unmounts meanwhile drops its host mapping.
   const threadRef = rightPanelHostRef(input.threadRef);
@@ -71,7 +73,10 @@ export async function openUrlInPreview<E>(input: {
   if (isBrowserSettingsReadError(defaults)) {
     return AsyncResult.failure(Cause.fail(defaults));
   }
-  const runtime = previewRuntimeFor(threadRef.environmentId);
+  // `undefined` is a desktop tab, so only `null` (no browser for the target) falls back.
+  const targetRuntime = previewRuntimeForLinkTarget(threadRef, input.target ?? "app");
+  const runtime =
+    targetRuntime === null ? previewRuntimeFor(threadRef.environmentId) : targetRuntime;
   const previousActiveTabId = readThreadPreviewState(threadRef).activeTabId;
   // The server changes the active tab, not panel selection; selection changes come from the user.
   const selectedSurface = () =>
