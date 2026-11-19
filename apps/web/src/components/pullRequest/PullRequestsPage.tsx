@@ -786,43 +786,62 @@ export function PullRequestsPage() {
   );
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
-  // The last full answer stays while a refresh travels, so Involving me rows do not jump.
+  // The last answer stays while the read has none, so Involving me rows do not jump. An
+  // environment that has not answered or failed is one the matcher cannot rule on.
+  const listedProviders = baselineQuery.data?.providers ?? listData?.providers ?? [];
   const involvedKey = JSON.stringify(partitionTargets.involved);
-  const settledInvolved =
-    !involvedQuery.isPending && involvedQuery.error === null ? involvedQuery.data : null;
+  const answeredInvolved =
+    involvedQuery.data === null
+      ? null
+      : { answer: involvedQuery.data, answered: involvedQuery.answered };
   const [heldInvolved, setHeldInvolved] = useState<{
     key: string;
     answer: MergedPullRequestList;
+    answered: ReadonlyArray<EnvironmentId>;
   } | null>(null);
   if (
-    settledInvolved !== null &&
-    (heldInvolved?.key !== involvedKey || heldInvolved.answer !== settledInvolved)
+    answeredInvolved !== null &&
+    (heldInvolved?.key !== involvedKey || heldInvolved.answer !== answeredInvolved.answer)
   ) {
-    setHeldInvolved({ key: involvedKey, answer: settledInvolved });
+    setHeldInvolved({ key: involvedKey, ...answeredInvolved });
   }
-  const involvedAnswer = !partitionsWanted
+  const involvedRead = !partitionsWanted
     ? null
-    : (settledInvolved ?? (heldInvolved?.key === involvedKey ? heldInvolved.answer : null));
+    : (answeredInvolved ?? (heldInvolved?.key === involvedKey ? heldInvolved : null));
+  const involvedAnswer = involvedRead?.answer ?? null;
   const shownInvolved = usePendingListEntries(overlayInput, involvedAnswer?.entries);
   const involved = pullRequestInvolvedMatcher(
-    involvedAnswer === null
+    involvedRead === null
       ? null
       : {
-          entries: involvedAnswer.entries,
-          slice: (environmentId, projectId) =>
+          entries: involvedRead.answer.entries,
+          environments: new Map(
+            involvedRead.answered.map((environmentId) => [
+              environmentId,
+              {
+                truncated: involvedRead.answer.truncatedEnvironments.includes(environmentId),
+                cursorKeys: new Set(
+                  Object.keys(involvedRead.answer.nextCursors[environmentId] ?? {}),
+                ),
+              },
+            ]),
+          ),
+          unknown: (entry) =>
+            involvedQuery.error?.environmentId === entry.environmentId ||
             !involvedQueries.some(
               (query) =>
-                query.environmentId === environmentId &&
-                query.projectIds.some((id) => id === projectId),
+                query.environmentId === entry.environmentId &&
+                query.projectIds.some((id) => id === entry.projectId),
             ) ||
-            involvedAnswer.errors.some(
-              (error) => error.environmentId === environmentId && error.projectId === projectId,
-            )
-              ? "unknown"
-              : involvedAnswer.truncatedEnvironments.includes(environmentId)
-                ? "paged"
-                : "complete",
+            involvedRead.answer.errors.some(
+              (error) =>
+                error.environmentId === entry.environmentId && error.projectId === entry.projectId,
+            ),
         },
+    (entry) => {
+      const provider = listedProviders.find((candidate) => candidate.host === entry.host);
+      return provider === undefined ? undefined : provider.listsInvolved === true;
+    },
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHidden, setShowHidden] = useState(false);

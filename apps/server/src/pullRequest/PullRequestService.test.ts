@@ -2639,41 +2639,37 @@ it.effect("shares one cold viewer lookup across distinct concurrent lists", () =
   }),
 );
 
-it.effect("reads `involved` as every row on a host that cannot narrow it", () =>
+it.effect("reads `involved` only from a host that narrows it, and says which hosts do", () =>
   Effect.gen(function* () {
-    const asked: string[] = [];
-    const service = yield* makeService({
-      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
-      providers: [
-        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
-          getViewer: () => Effect.succeed("bilal"),
-          listChangeRequests: (input) =>
-            Effect.sync(() => {
-              asked.push(input.involvement);
-              return {
-                items: [
-                  { ...changeRequest(1, "2026-07-03T00:00:00Z"), author: null },
-                  {
-                    ...changeRequest(2, "2026-07-02T00:00:00Z"),
-                    author: { login: "Bilal", name: null, avatarUrl: null },
-                  },
-                  { ...changeRequest(3, "2026-07-01T00:00:00Z"), reviewRequestLogins: ["bilal"] },
-                ],
-                truncated: false,
-                continues: true,
-              };
-            }),
-        }),
-      ],
-    });
+    for (const listsInvolved of [false, true]) {
+      const asked: string[] = [];
+      const service = yield* makeService({
+        projects: [
+          project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        ],
+        providers: [
+          fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+            ...(listsInvolved ? { listsInvolved } : {}),
+            getViewer: () => Effect.succeed("bilal"),
+            listChangeRequests: (input) =>
+              Effect.sync(() => {
+                asked.push(input.involvement);
+                return {
+                  items: [changeRequest(1, "2026-07-03T00:00:00Z")],
+                  truncated: false,
+                  continues: true,
+                };
+              }),
+          }),
+        ],
+      });
 
-    const result = yield* service.list({ state: "open", involvement: "involved" });
+      const result = yield* service.list({ state: "open", involvement: "involved" });
 
-    assert.deepStrictEqual(asked, ["all"]);
-    assert.deepStrictEqual(
-      result.entries.map((entry) => entry.number),
-      [2, 3],
-    );
+      assert.deepStrictEqual(asked, listsInvolved ? ["involved"] : []);
+      assert.strictEqual(result.entries.length, listsInvolved ? 1 : 0);
+      assert.strictEqual(result.providers[0]?.listsInvolved, listsInvolved ? true : undefined);
+    }
   }),
 );
 

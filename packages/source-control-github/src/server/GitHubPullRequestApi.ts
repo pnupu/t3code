@@ -919,17 +919,13 @@ function matchesUnsortedListing(
 ): boolean {
   const matchesState = input.state === "all" || item.state === input.state;
   const viewer = input.viewer.toLowerCase();
-  const authored = item.author?.login.toLowerCase() === viewer;
-  const reviewing =
-    item.hasTeamReviewRequest ||
-    item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer);
+  // `involved` never reaches this listing: `listPullRequests` does not fall back for it.
   const matchesInvolvement =
     input.involvement === "all" ||
     (input.involvement === "authored"
-      ? authored
-      : input.involvement === "reviewing"
-        ? reviewing
-        : authored || reviewing);
+      ? item.author?.login.toLowerCase() === viewer
+      : item.hasTeamReviewRequest ||
+        item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer));
   return matchesState && matchesInvolvement && matchesFilters(item, input.filters, input.viewer);
 }
 
@@ -1965,11 +1961,11 @@ export const make = Effect.gen(function* () {
       const listed = read(true).pipe(
         Effect.filterOrElse(
           (batch) => batch.items.length > 0 || input.cursor !== undefined || hasQuery,
-          // The listing has no comments, mentions, or assignees, so it cannot rule on `involved`:
-          // an empty truncated page tells the caller to keep the rows it cannot rule on.
+          // The listing has no comments, mentions, or assignees, so it cannot answer `involved`;
+          // the provider tells an empty answer from an unindexed repository.
           () =>
             input.involvement === "involved"
-              ? Effect.succeed({ items: [], truncated: true, continues: false })
+              ? Effect.succeed({ items: [], truncated: false, continues: false })
               : read(false),
         ),
         Effect.filterOrElse(

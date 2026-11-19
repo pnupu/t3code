@@ -749,6 +749,8 @@ export function usePullRequestTurnRefresh(environmentId: EnvironmentId): number 
 
 export interface MergedPullRequestListView {
   readonly data: MergedPullRequestList | null;
+  /** The environments whose answer `data` holds. */
+  readonly answered: ReadonlyArray<EnvironmentId>;
   readonly error: EnvironmentQueryError | null;
   readonly isPending: boolean;
   readonly observations: ReadonlyArray<readonly [EnvironmentId, PullRequestListResult, number]>;
@@ -764,6 +766,7 @@ export function usePullRequestList(
   const data = mergePullRequestLists(query.values);
   return {
     data,
+    answered: query.values.map(([environmentId]) => environmentId),
     error: query.error,
     isPending: query.isPending,
     observations: query.observations,
@@ -778,6 +781,7 @@ export function usePullRequestHostList(
   const data = mergePullRequestLists(query.values);
   return {
     data,
+    answered: query.values.map(([environmentId]) => environmentId),
     error: query.error,
     isPending: query.isPending,
     observations: query.observations,

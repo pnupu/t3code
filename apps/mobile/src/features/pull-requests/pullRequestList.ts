@@ -1,4 +1,5 @@
 import { pullRequestFilterProjects } from "@t3tools/client-runtime/pull-request-project-filter";
+import type { PullRequestInvolvedEnvironment } from "@t3tools/client-runtime/pull-request-feed";
 import { parsePullRequestQuery } from "@t3tools/client-runtime/pull-request-query";
 import {
   ProjectId,
@@ -214,20 +215,31 @@ export function mergeEnvironmentPullRequestPages(
 ) {
   const viewers: Record<string, string> = {};
   const localSearchHosts = new Set<string>();
+  /** `<environmentId> <host>`: whether that host narrows `involved` itself. */
+  const listsInvolved = new Map<string, boolean>();
+  const environments = new Map<string, PullRequestInvolvedEnvironment>();
   const entries: EnvironmentPullRequestListEntry[] = [];
   const errors = [];
   for (const { environmentId, pages } of sources) {
+    environments.set(environmentId, {
+      truncated: pages.truncated,
+      cursorKeys: new Set(Object.keys(pages.nextCursors)),
+    });
     entries.push(...pages.entries.map((entry) => ({ ...entry, environmentId })));
     for (const [host, viewer] of Object.entries(pages.head.viewers))
       viewers[`${environmentId} ${host}`] = viewer;
-    for (const provider of pages.head.providers)
+    for (const provider of pages.head.providers) {
       if (!provider.searchesOnHost) localSearchHosts.add(`${environmentId} ${provider.host}`);
+      listsInvolved.set(`${environmentId} ${provider.host}`, provider.listsInvolved === true);
+    }
     errors.push(...pages.head.errors.map((error) => ({ ...error, environmentId })));
   }
   return {
     entries,
     viewers,
     localSearchHosts,
+    listsInvolved,
+    environments,
     errors,
     continued: sources.some(({ pages }) => pages.continued),
   };

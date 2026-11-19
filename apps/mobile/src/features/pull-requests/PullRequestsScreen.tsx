@@ -204,22 +204,37 @@ export function PullRequestsScreen(
     });
   }, [mainAnswered, involvedProjectKey, targets]);
   const involvedList = usePullRequestList(involvedTargets);
+  // `involves:` leaves out a pull request only waiting on the viewer's review, so the review list
+  // joins the candidates too; its rows are admitted by their own group.
+  const reviewingTargets = useMemo(
+    () =>
+      involvedTargets.map((target) => ({
+        ...target,
+        input: { ...target.input, involvement: "reviewing" as const },
+      })),
+    [involvedTargets],
+  );
+  const reviewingList = usePullRequestList(reviewingTargets);
+  const mainProviders = result.data.listsInvolved;
   const involved = pullRequestInvolvedMatcher(
-    involvedTargets.length === 0 || !involvedList.answered || involvedList.data.errors.length > 0
+    involvedTargets.length === 0
       ? null
       : {
           entries: involvedList.entries,
-          slice: (environmentId, projectId) =>
+          environments: involvedList.data.environments,
+          unknown: (entry) =>
             !involvedTargets.some(
               (target) =>
-                target.environmentId === environmentId &&
-                target.input.projectIds.some((id) => id === projectId),
-            )
-              ? "unknown"
-              : involvedList.hasMore
-                ? "paged"
-                : "complete",
+                target.environmentId === entry.environmentId &&
+                target.input.projectIds.some((id) => id === entry.projectId),
+            ) ||
+            involvedList.data.errors.some(
+              (error) =>
+                error.environmentId === entry.environmentId &&
+                (!("projectId" in error) || error.projectId === entry.projectId),
+            ),
         },
+    (entry) => mainProviders.get(`${entry.environmentId} ${entry.host}`),
   );
   const connectedTargets = targets.filter((target) =>
     environments.some(
@@ -242,7 +257,7 @@ export function PullRequestsScreen(
         // Involved rows the main list has not reached yet join it, as on web.
         involvedTargets.length === 0
           ? result.entries
-          : [...result.entries, ...involvedList.entries],
+          : [...result.entries, ...involvedList.entries, ...reviewingList.entries],
         controls,
         result.data?.viewers ?? {},
         query,
@@ -253,6 +268,7 @@ export function PullRequestsScreen(
       result.entries,
       involvedTargets,
       involvedList.entries,
+      reviewingList.entries,
       controls,
       query,
       result.data,
@@ -410,7 +426,11 @@ export function PullRequestsScreen(
         refreshControl={
           <RefreshControl
             refreshing={result.refreshing}
-            onRefresh={() => void result.onRefresh()}
+            onRefresh={() => {
+              result.onRefresh();
+              involvedList.onRefresh();
+              reviewingList.onRefresh();
+            }}
             // The list already accounts for the navigation header in its content inset.
             progressViewOffset={Platform.OS === "ios" ? 60 : undefined}
           />

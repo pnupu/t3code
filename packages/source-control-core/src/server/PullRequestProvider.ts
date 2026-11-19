@@ -338,8 +338,8 @@ export interface PullRequestProviderApi {
   /** Concurrent summary reads share requests, so callers may keep many in flight. */
   readonly batchesReads?: boolean;
   /**
-   * Narrows `involved` on the host, comments and mentions included. Other providers are asked for
-   * `all`, and the caller keeps the rows the viewer wrote or is asked to review.
+   * Narrows `involved` on the host, comments and mentions included. Other providers are not read
+   * for `involved`; clients decide those rows from authorship and review requests.
    */
   readonly listsInvolved?: boolean;
   /**

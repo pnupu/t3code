@@ -20,7 +20,6 @@ import {
   pullRequestFeedShows,
   pullRequestInvolvedMatcher,
   type PullRequestFeedGroup,
-  type PullRequestInvolvedSlice,
 } from "./pullRequestFeed.ts";
 
 const projectA = ProjectId.make("project-a");
@@ -52,37 +51,59 @@ describe("pull request feed rules", () => {
   });
 
   it("counts a row the involved listing cannot rule on as involved", () => {
-    const row = (projectId: string, url: string, updatedAt: string) => ({
-      environmentId: "env",
-      projectId,
+    const row = (repository: string, url: string, updatedAt: string, environmentId = "env") => ({
+      environmentId,
+      projectId: repository,
+      host: "github.com",
+      repository,
       url,
       updatedAt,
     });
-    // The busy slice's page ends at 07-05; the quiet slice reaches back to 07-01.
+    // The busy repository's page ends at 07-05; the quiet one is read to its end.
     const listed = [
-      row("busy", "https://h/a/9", "2026-07-05"),
-      row("quiet", "https://h/b/1", "2026-07-01"),
+      row("acme/busy", "https://h/a/9", "2026-07-05"),
+      row("acme/quiet", "https://h/b/1", "2026-07-01"),
     ];
-    expect(pullRequestInvolvedMatcher(null)(row("busy", "https://h/a/1", "2026-07-03"))).toBe(true);
-    const slices: Record<string, PullRequestInvolvedSlice> = {
-      busy: "paged",
-      quiet: "complete",
-      failed: "unknown",
-      silent: "paged",
-    };
-    const involved = pullRequestInvolvedMatcher({
-      entries: listed,
-      slice: (_, projectId) => slices[projectId] ?? "unknown",
-    });
-    expect(involved(row("busy", "https://h/a/9", "2026-07-05"))).toBe(true);
-    // Older than its own slice's page, though newer than the oldest row of the whole answer.
-    expect(involved(row("busy", "https://h/a/2", "2026-07-03"))).toBe(true);
-    // Tied with its slice's last row, so the next page could hold it.
-    expect(involved(row("busy", "https://h/a/3", "2026-07-05"))).toBe(true);
-    expect(involved(row("busy", "https://h/a/4", "2026-07-06"))).toBe(false);
-    expect(involved(row("quiet", "https://h/b/2", "2026-07-03"))).toBe(false);
-    expect(involved(row("failed", "https://h/c/1", "2026-07-06"))).toBe(true);
-    expect(involved(row("silent", "https://h/d/1", "2026-07-06"))).toBe(true);
+    const lists = (entry: { readonly host: string }) =>
+      entry.host === "github.com" ? true : entry.host === "gitlab.com" ? false : undefined;
+    expect(
+      pullRequestInvolvedMatcher(null, lists)(row("acme/busy", "https://h/a/1", "2026-07-03")),
+    ).toBe(true);
+    // A host that cannot list involvement leaves an Others row out, answered or not.
+    const gitlab = { ...row("acme/web", "https://l/a/1", "2026-07-06"), host: "gitlab.com" };
+    expect(pullRequestInvolvedMatcher(null, lists)(gitlab)).toBe(false);
+    expect(pullRequestInvolvedMatcher(null, lists)({ ...gitlab, host: "git.example" })).toBe(true);
+    const involved = pullRequestInvolvedMatcher(
+      {
+        entries: listed,
+        environments: new Map([
+          [
+            "env",
+            {
+              truncated: true,
+              cursorKeys: new Set(["github.com acme/busy", "github.com acme/silent"]),
+            },
+          ],
+          ["bare", { truncated: true, cursorKeys: new Set<string>() }],
+        ]),
+        unknown: (entry) => entry.repository === "acme/failed",
+      },
+      lists,
+    );
+    expect(involved(row("acme/busy", "https://h/a/9", "2026-07-05"))).toBe(true);
+    // Older than its own repository's page, though newer than the oldest row of the answer.
+    expect(involved(row("acme/busy", "https://h/a/2", "2026-07-03"))).toBe(true);
+    // Tied with its repository's last row, so the next page could hold it.
+    expect(involved(row("acme/busy", "https://h/a/3", "2026-07-05"))).toBe(true);
+    expect(involved(row("acme/busy", "https://h/a/4", "2026-07-06"))).toBe(false);
+    // Another repository's truncation does not page a repository read to its end.
+    expect(involved(row("acme/quiet", "https://h/b/2", "2026-07-03"))).toBe(false);
+    expect(involved(row("acme/idle", "https://h/f/1", "2026-07-06"))).toBe(false);
+    expect(involved(row("acme/failed", "https://h/c/1", "2026-07-06"))).toBe(true);
+    expect(involved(row("acme/silent", "https://h/d/1", "2026-07-06"))).toBe(true);
+    expect(involved(row("acme/web", "https://h/e/1", "2026-07-06", "bare"))).toBe(true);
+    expect(involved(row("acme/web", "https://h/e/2", "2026-07-06", "pending"))).toBe(true);
+    expect(involved({ ...gitlab, environmentId: "env" })).toBe(false);
   });
 
   it("resolves a project override over the environment rule", () => {

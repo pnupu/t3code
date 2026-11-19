@@ -116,7 +116,15 @@ export function pullRequestGroups({
     const narrowedAuthored = narrow(partitionsWanted ? (authored ?? held?.authored) : undefined);
     const narrowedReviewing = narrow(partitionsWanted ? (reviewing ?? held?.reviewing) : undefined);
     if (narrowedAuthored === undefined || narrowedReviewing === undefined) {
-      return groupPullRequestsByInvolvement(searched, viewers);
+      // The involved rows still join while an authored or reviewing read has no answer.
+      const listed = new Set(searched.map((entry) => entry.url));
+      const added = (narrow(involved) ?? []).filter((entry) => !listed.has(entry.url));
+      return groupPullRequestsByInvolvement(
+        added.length === 0
+          ? searched
+          : [...searched, ...added].toSorted(comparePullRequestsByRecency),
+        viewers,
+      );
     }
     return partitionPullRequestsWithPriority(
       searched,

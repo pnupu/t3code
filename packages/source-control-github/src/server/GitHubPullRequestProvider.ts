@@ -275,7 +275,10 @@ export const make = Effect.gen(function* () {
     timeToLive: (exit) => (Exit.isSuccess(exit) ? SEARCH_COVERAGE_TTL : Duration.zero),
   });
   const coverageOf = (
-    input: Parameters<NonNullable<PullRequestProviderApi["listChangeRequestsAcross"]>>[0],
+    input: Pick<
+      Parameters<NonNullable<PullRequestProviderApi["listChangeRequestsAcross"]>>[0],
+      "cwd" | "host" | "viewer"
+    >,
     repository: string,
   ) =>
     new SearchCoverage(
@@ -431,6 +434,19 @@ export const make = Effect.gen(function* () {
         })
         .pipe(
           Effect.mapError(fail("listChangeRequests")),
+          // An empty `involved` search is an answer only where search covers the repository;
+          // elsewhere a truncated page tells the caller it cannot rule on the repository's rows.
+          Effect.filterOrElse(
+            (page) =>
+              input.involvement !== "involved" ||
+              page.items.length > 0 ||
+              input.cursor !== undefined,
+            (page) =>
+              Cache.get(searchCoverage, coverageOf(input, input.repository)).pipe(
+                Effect.orElseSucceed(() => false),
+                Effect.map((covered) => (covered ? page : { ...page, truncated: true })),
+              ),
+          ),
           Effect.map((page) => ({
             ...page,
             items: page.items.map((item) => ({

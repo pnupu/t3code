@@ -2211,7 +2211,7 @@ layer("GitHubPullRequestApi.layer", (it) => {
       expect(searchOfCall(1)).toBeUndefined();
       assert.isFalse(batch.continues);
 
-      // The listing cannot see mentions or comments, so `involved` gets no rows to rule with.
+      // The listing cannot see mentions or comments, so `involved` does not read it.
       mockedExecute.mockReturnValueOnce(Effect.succeed(emptySearch()));
       const involved = yield* cli.listPullRequests({
         cwd: "/w",
@@ -2222,7 +2222,7 @@ layer("GitHubPullRequestApi.layer", (it) => {
         viewer: "bilal",
         limit: 10,
       });
-      expect(involved).toMatchObject({ items: [], truncated: true, continues: false });
+      expect(involved).toMatchObject({ items: [], truncated: false, continues: false });
       assert.strictEqual(mockedExecute.mock.calls.length, 3);
     }),
   );

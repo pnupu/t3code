@@ -85,41 +85,57 @@ export function pullRequestFeedShows(
   }
 }
 
-/** How far one project's `involved` read reaches: all of it, its first page, or nothing known. */
-export type PullRequestInvolvedSlice = "complete" | "paged" | "unknown";
-
 type InvolvedRow = {
   readonly url: string;
   readonly updatedAt: string;
   readonly environmentId: string;
   readonly projectId: string;
+  readonly host: string;
+  readonly repository: string;
 };
 
+/** One environment's answer to the `involved` read: its truncation and its per-repository cursors. */
+export interface PullRequestInvolvedEnvironment {
+  readonly truncated: boolean;
+  /** The service's cursor keys, `<host> <repository>`, of the repositories that have more. */
+  readonly cursorKeys: ReadonlySet<string>;
+}
+
 /**
- * Reads the host's `involved` listing for `PullRequestFeedOptions.involved`. A row it cannot rule
- * on counts as involved: with no answer, from a slice that was not read or failed, or not newer
- * than the last row of its slice's page, so the rule never hides a row the host would list.
+ * For `PullRequestFeedOptions.involved`. A host that does not list involvement rules Others rows
+ * out. Elsewhere a row the listing cannot rule on counts as involved: no answer, an environment
+ * or slice not read or failed, or a repository page that stopped at or after the row's update.
  */
 export function pullRequestInvolvedMatcher(
   answer: {
     readonly entries: ReadonlyArray<InvolvedRow>;
-    readonly slice: (environmentId: string, projectId: string) => PullRequestInvolvedSlice;
+    readonly environments: ReadonlyMap<string, PullRequestInvolvedEnvironment>;
+    readonly unknown: (entry: InvolvedRow) => boolean;
   } | null,
+  listsInvolved: (entry: InvolvedRow) => boolean | undefined,
 ): (entry: InvolvedRow) => boolean {
-  if (answer === null) return () => true;
+  if (answer === null) return (entry) => listsInvolved(entry) !== false;
+  const sliceOf = (entry: InvolvedRow) => `${entry.host} ${entry.repository.toLowerCase()}`;
   const urls = new Set<string>();
   const oldest = new Map<string, string>();
   for (const entry of answer.entries) {
     urls.add(entry.url);
-    const key = `${entry.environmentId} ${entry.projectId}`;
+    const key = `${entry.environmentId} ${sliceOf(entry)}`;
     const held = oldest.get(key);
     if (held === undefined || entry.updatedAt < held) oldest.set(key, entry.updatedAt);
   }
   return (entry) => {
     if (urls.has(entry.url)) return true;
-    const slice = answer.slice(entry.environmentId, entry.projectId);
-    if (slice !== "paged") return slice === "unknown";
-    const boundary = oldest.get(`${entry.environmentId} ${entry.projectId}`);
+    const lists = listsInvolved(entry);
+    if (lists === false) return false;
+    const environment = answer.environments.get(entry.environmentId);
+    if (environment === undefined || answer.unknown(entry)) return true;
+    // A host with no cursor to give says only that the environment has more.
+    const paged =
+      environment.cursorKeys.has(sliceOf(entry)) ||
+      (environment.truncated && environment.cursorKeys.size === 0);
+    if (!paged) return false;
+    const boundary = oldest.get(`${entry.environmentId} ${sliceOf(entry)}`);
     return boundary === undefined || entry.updatedAt <= boundary;
   };
 }
