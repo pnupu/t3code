@@ -91,7 +91,7 @@ import {
 import { pullRequestGroups, pullRequestListEntryId } from "./pullRequestListGroups.logic";
 import { PullRequestListEmptyState } from "./PullRequestListEmptyState";
 import { PullRequestListGhost } from "./PullRequestGhosts";
-import { type PullRequestRowTarget } from "./PullRequestRow";
+import { type PullRequestRowMenu, type PullRequestRowTarget } from "./PullRequestRow";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { RightPanelTabs } from "../RightPanelTabs";
 import { isCommandPaletteOpen } from "~/commandPaletteBus";
@@ -773,6 +773,17 @@ export function PullRequestsPage() {
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHidden, setShowHidden] = useState(false);
+  // Only copies in the list's scope: a row shows when any of their rules allows it.
+  const rulesFor = pullRequestRepositoryRules(
+    projects,
+    (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+    (project) => feed.ruleCounts(project.environmentId),
+    feed.ruleFor,
+  );
+  // The menu checks the same rules that decide the row.
+  const showRowMenu: PullRequestRowMenu = useStableCallback((entry, openLabel, position) =>
+    feed.showRowMenu(entry, openLabel, position, rulesFor(entry)),
+  );
   const {
     listedPullRequestTabStatuses,
     groups,
@@ -807,13 +818,7 @@ export function PullRequestsPage() {
     partitionsWanted,
     feed: {
       scopedToProject: scopedProjectId !== undefined,
-      // Only copies in the list's scope: a row shows when any of their rules allows it.
-      rulesFor: pullRequestRepositoryRules(
-        projects,
-        (project) => feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }),
-        (project) => feed.ruleCounts(project.environmentId),
-        feed.ruleFor,
-      ),
+      rulesFor,
       hidden: feed.hidden,
       repositoryHidden: feed.repositoryHidden,
       showHidden,
@@ -1333,7 +1338,7 @@ export function PullRequestsPage() {
           closingKeys={closingKeys}
           sweepingKeys={closeSweepKeys}
           onCloseSweepStart={startCloseSweep}
-          onRowMenu={feed.showRowMenu}
+          onRowMenu={showRowMenu}
         />
       )}
       {hiddenCount > 0 ? (
