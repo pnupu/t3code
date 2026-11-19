@@ -33,6 +33,7 @@ export interface LinkClickModifiers {
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
   readonly shiftKey?: boolean | undefined;
+  readonly altKey?: boolean | undefined;
   readonly button?: number | undefined;
 }
 
@@ -45,9 +46,10 @@ export interface ResolveLinkTargetInput {
 
 export function resolveLinkTarget(input: ResolveLinkTargetInput): LinkTarget {
   if (input.event.button === 1 || !isWebUrl(input.url)) return "system";
-  const target: BrowserLinkTarget | BrowserModifiedLinkTarget = !(
-    input.event.metaKey || input.event.ctrlKey
-  )
+  const modified = input.event.metaKey || input.event.ctrlKey;
+  // Desktop link routers read a held Alt from the system browser open.
+  if (modified && input.event.altKey) return "system";
+  const target: BrowserLinkTarget | BrowserModifiedLinkTarget = !modified
     ? input.settings.browserLinkTarget
     : input.event.shiftKey
       ? input.settings.browserModShiftClickLinkTarget
