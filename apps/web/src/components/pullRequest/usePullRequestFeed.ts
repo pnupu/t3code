@@ -6,6 +6,7 @@ import {
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
   pullRequestFeedRuleRows,
+  pullRequestFeedRuleTargets,
   type PullRequestFeedRuleRow,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
@@ -149,7 +150,7 @@ export function usePullRequestFeed() {
     return canWriteRule(own.environmentId) ? [own] : [];
   };
 
-  const setProjectRule = (members: ReturnType<typeof ruleMembers>, rule: PullRequestFeedRule) => {
+  const setProjectRule = (members: ReadonlyArray<ScopeProject>, rule: PullRequestFeedRule) => {
     runPlan(environments, (current) =>
       planProjectOverridePatch(current, members, { pullRequestFeed: rule }),
     );
@@ -176,24 +177,22 @@ export function usePullRequestFeed() {
       },
     );
   type RuleRow = PullRequestFeedRuleRow<ScopeProject>;
-  const writableCopies = (row: RuleRow) => row.copies.filter((copy) => copy.access === "writable");
-  const setRowRule = (row: RuleRow, rule: PullRequestFeedRule) =>
-    setProjectRule(
-      writableCopies(row).map((copy) => copy.project),
-      rule,
-    );
-  const resetRowRule = (row: RuleRow) =>
+  // A pick that changes no copy writes nothing, so it cannot pin inherited rules.
+  const setRowRule = (row: RuleRow, rule: PullRequestFeedRule) => {
+    const members = pullRequestFeedRuleTargets(row, rule);
+    if (members.length > 0) setProjectRule(members, rule);
+  };
+  const resetRowRule = (row: RuleRow) => {
+    const members = pullRequestFeedRuleTargets(row, null);
+    if (members.length === 0) return;
     runPlan(environments, (current) =>
       planProjectOverridesClear(
         current,
-        writableCopies(row).flatMap((copy) =>
-          copy.overridden
-            ? [{ environmentId: copy.project.environmentId, projectId: copy.project.id }]
-            : [],
-        ),
+        members.map((project) => ({ environmentId: project.environmentId, projectId: project.id })),
         ["pullRequestFeed"],
       ),
     );
+  };
 
   const openRowMenu = async (
     entry: EnvironmentPullRequestEntry,
@@ -253,7 +252,12 @@ export function usePullRequestFeed() {
       unhide(entry.url);
     } else {
       const picked = PULL_REQUEST_FEED_RULES.find((option) => action === `rule:${option.value}`);
-      if (picked) setProjectRule(members, picked.value);
+      // Like the Settings overview, a copy already on the rule keeps following its default.
+      const changed = members.filter(
+        (member) =>
+          ruleFor({ environmentId: member.environmentId, projectId: member.id }) !== picked?.value,
+      );
+      if (picked && changed.length > 0) setProjectRule(changed, picked.value);
     }
   };
 
