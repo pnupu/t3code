@@ -52,6 +52,7 @@ describe("resolveLinkTarget", () => {
     { event: { metaKey: false, ctrlKey: true, shiftKey: true }, expected: "environment" },
     { event: { metaKey: false, ctrlKey: false, shiftKey: true }, expected: "app" },
     { event: { metaKey: true, ctrlKey: false, button: 1 }, expected: "system" },
+    { event: { metaKey: true, ctrlKey: false, altKey: true }, expected: "system" },
   ])("picks the setting for $event", ({ event, expected }) => {
     expect(resolveLinkTarget({ url, event, settings, canOpenIn: () => true })).toBe(expected);
   });

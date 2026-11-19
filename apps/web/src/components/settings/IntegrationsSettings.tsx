@@ -716,7 +716,9 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
     <SettingsRow
       {...searchableSetting("browser-link-target")}
       devicePreference
-      description={gt("Where links in the chat and terminal open when you click them.")}
+      description={gt(
+        "Where links in the chat and terminal open when you click them. A middle click always opens your default browser.",
+      )}
       resetAction={
         !disabled && linkTarget !== DEFAULT_BROWSER_LINK_TARGET ? (
           <SettingResetButton
