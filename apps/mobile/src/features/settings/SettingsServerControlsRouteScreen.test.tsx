@@ -36,10 +36,16 @@ vi.mock("react-native", () => ({
     </button>
   ),
 }));
-vi.mock("@effect/atom-react", () => ({
-  useAtomValue: () => AsyncResult.success({}),
-  useAtomSet: () => () => {},
-}));
+vi.mock("@effect/atom-react", async () => {
+  const { createContext } = await import("react");
+  return {
+    // Empty server configs and no pending saves; a Map also spreads to an empty list.
+    RegistryContext: createContext({ get: () => new Map(), set: () => {} }),
+    useAtomValue: (atom: { readonly label?: readonly [string, string] }) =>
+      atom?.label?.[0] === "mobile-settings:pending-writes" ? [] : AsyncResult.success({}),
+    useAtomSet: () => () => {},
+  };
+});
 vi.mock("../../state/preferences", () => ({
   mobilePreferencesAtom: {},
   updateMobilePreferencesAtom: {},
@@ -59,7 +65,10 @@ vi.mock("../../state/session", () => ({
         .filter((environmentId) => !mocks.readOnly.has(environmentId)),
     ),
 }));
-vi.mock("../../state/server", () => ({ serverEnvironment: { updateSettings: {} } }));
+vi.mock("../../state/server", () => ({
+  environmentServerConfigsAtom: {},
+  serverEnvironment: { updateSettings: {} },
+}));
 vi.mock("../pull-requests/usePullRequestFeed", () => ({
   usePullRequestFeed: () => ({
     hiddenUrls: [],

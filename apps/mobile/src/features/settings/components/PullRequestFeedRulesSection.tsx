@@ -2,6 +2,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRuleRows,
+  pullRequestFeedRuleTargets,
   type PullRequestFeedRuleRow,
 } from "@t3tools/client-runtime/pull-request-feed";
 import { AuthSettingsWriteScope, type EnvironmentId } from "@t3tools/contracts";
@@ -19,10 +20,11 @@ import {
   planMobileScopedSettingsClear,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
+  withPendingMobileSettingsWrites,
 } from "../settings-scoped-server";
 import type { SettingsTarget } from "../settings-environment-filter";
 import { openSentFeedRules, type SentFeedRule } from "../sentFeedRules";
-import { useSettingsWriter } from "../useSettingsWriter";
+import { pendingMobileSettingsWritesAtom, useSettingsWriter } from "../useSettingsWriter";
 import { SettingsSection } from "./SettingsSection";
 
 const DEFAULT_ACTION = "default";
@@ -38,6 +40,7 @@ export function PullRequestFeedRulesSection(props: {
   const { environments } = useEnvironments();
   const configs = useAtomValue(environmentServerConfigsAtom);
   const registry = use(RegistryContext);
+  const pendingSaves = useAtomValue(pendingMobileSettingsWritesAtom);
   const projects = useProjects();
   const writeSettings = useSettingsWriter();
   const writable = useEnvironmentsWithScope(props.targets, AuthSettingsWriteScope);
@@ -65,7 +68,11 @@ export function PullRequestFeedRulesSection(props: {
       if (!environment || !config) return undefined;
       return {
         label: environment.label,
-        settings: config.settings,
+        // With this device's unanswered saves, so a pick compares against the newest rule.
+        settings: withPendingMobileSettingsWrites(
+          [{ environmentId, serverConfig: config }],
+          pendingSaves,
+        )[0]!.serverConfig.settings,
         connected: environment.connection.phase === "connected",
         capable: config.environment.capabilities.pullRequestFeed === true,
         writeGranted: writable.has(environmentId),
@@ -79,11 +86,13 @@ export function PullRequestFeedRulesSection(props: {
   const pick = (row: Row, action: string) => {
     const reset = action === DEFAULT_ACTION;
     const rule = PULL_REQUEST_FEED_RULES.find((option) => option.value === action)?.value;
-    if (pending || (!reset && (rule === undefined || rule === row.rule))) return;
-    const members = row.copies.flatMap((copy) =>
-      copy.access === "writable" && (!reset || copy.overridden) ? [copy.project] : [],
+    if (pending || (!reset && rule === undefined)) return;
+    const members = pullRequestFeedRuleTargets(row, reset ? null : rule!);
+    if (members.length === 0) return;
+    const targets = resolveMobileSettingsTargets(
+      withPendingMobileSettingsWrites(props.targets, pendingSaves),
+      members,
     );
-    const targets = resolveMobileSettingsTargets(props.targets, members);
     const writes = reset
       ? planMobileScopedSettingsClear(targets, ["pullRequestFeed"])
       : planMobileScopedSettingsPatch(targets, true, { pullRequestFeed: rule! });

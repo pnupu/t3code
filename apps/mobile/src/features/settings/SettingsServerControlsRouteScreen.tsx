@@ -32,13 +32,15 @@ import { SourceControlSignInSection } from "./components/SourceControlSignInSect
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { PullRequestFeedRulesSection } from "./components/PullRequestFeedRulesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
-import { useSettingsWriter } from "./useSettingsWriter";
+import { pendingMobileSettingsWritesAtom, useSettingsWriter } from "./useSettingsWriter";
+import { useAtomValue } from "@effect/atom-react";
 import {
   managedSettingReason,
   planMobileScopedSettingsClear,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
   uniformMobileSetting,
+  withPendingMobileSettingsWrites,
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
@@ -187,8 +189,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const selectedProject = projectGroups.find((group) => group.key === selectedProjectKey);
   const writableEnvironments = useEnvironmentsWithScope(selectedTargets, AuthSettingsWriteScope);
   const projectSelected = selectedProjectKey !== null;
+  const pendingSaves = useAtomValue(pendingMobileSettingsWritesAtom);
+  // Plans start from this device's unanswered saves too, such as a feed rule from the overview.
   const targets = resolveMobileSettingsTargets(
-    selectedTargets,
+    withPendingMobileSettingsWrites(selectedTargets, pendingSaves),
     projectSelected ? (selectedProject?.members.map((member) => member.project) ?? []) : null,
   );
   const [pendingWrites, setPendingWrites] = useState(0);

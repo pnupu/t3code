@@ -12,7 +12,9 @@ import {
   planMobileScopedSettingsClear,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
+  settlePendingMobileSettingsWrites,
   uniformMobileSetting,
+  withPendingMobileSettingsWrites,
 } from "./settings-scoped-server";
 
 const firstId = "first" as EnvironmentId;
@@ -161,6 +163,46 @@ describe("mobile project settings scope", () => {
     expect(
       planMobileScopedSettingsPatch(targets, true, { enableProviderUpdateChecks: false }),
     ).toEqual([]);
+  });
+});
+
+describe("project writes over this device's pending saves", () => {
+  const cached: ServerSettings = { ...DEFAULT_SERVER_SETTINGS, projectSettingsOverrides: {} };
+  const feedSave = {
+    save: {},
+    environmentId: firstId,
+    patch: { projectSettingsOverrides: { [firstProject]: { pullRequestFeed: "hidden" as const } } },
+  };
+
+  it("keeps a feed rule whose save the cache has not shown yet", () => {
+    const targets = resolveMobileSettingsTargets(
+      withPendingMobileSettingsWrites([environment(firstId, cached)], [feedSave]),
+      [{ environmentId: firstId, id: firstProject }],
+    );
+    expect(
+      planMobileScopedSettingsPatch(targets, true, { removeAgentCreditsOnMerge: true }),
+    ).toEqual([
+      {
+        environmentId: firstId,
+        patch: {
+          projectSettingsOverrides: {
+            [firstProject]: { pullRequestFeed: "hidden", removeAgentCreditsOnMerge: true },
+          },
+        },
+      },
+    ]);
+  });
+
+  it("stops applying a saved write once the cache moves past its reply", () => {
+    const saved = { ...feedSave, repliedOver: cached };
+    expect(settlePendingMobileSettingsWrites([feedSave, saved], () => cached)).toEqual([
+      feedSave,
+      saved,
+    ]);
+    const pushed = { ...cached };
+    expect(settlePendingMobileSettingsWrites([feedSave, saved], () => pushed)).toEqual([feedSave]);
+    const [target] = withPendingMobileSettingsWrites([environment(firstId, pushed)], [saved]);
+    expect(target?.serverConfig.settings).toBe(pushed);
   });
 });
 
