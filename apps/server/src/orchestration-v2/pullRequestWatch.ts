@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-/** Bounds consecutive wakes that bring only comments or finished reruns, to stop bot loops. */
+/** Bounds consecutive wakes that bring only comments or finished checks, to stop bot loops. */
 export const PULL_REQUEST_WATCH_WAKE_LIMIT = 10;
 /** How long a head may go without any check before the agent is told none reported. */
 export const PULL_REQUEST_WATCH_NO_CHECKS_MS = 15 * 60_000;
@@ -525,7 +525,7 @@ export function pullRequestWatchMessage(input: {
     ...changes.flatMap((change) => changeLines(change, context)),
     "",
     exhausted
-      ? `T3 Code stopped watching after ${PULL_REQUEST_WATCH_WAKE_LIMIT} updates in a row that brought only comments or finished reruns. Call watch_pull_request to watch it again.`
+      ? `T3 Code stopped watching after ${PULL_REQUEST_WATCH_WAKE_LIMIT} updates in a row that brought only comments or finished checks. Call watch_pull_request to watch it again.`
       : WATCHING_CLOSING,
   ].join("\n");
   const failed = changes.some(
