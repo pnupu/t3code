@@ -261,8 +261,9 @@ export interface PullRequestFeedRuleEnvironment {
 export interface PullRequestFeedRuleCopy<Project> {
   readonly project: Project;
   readonly environmentLabel: string;
-  readonly rule: PullRequestFeedRule;
-  /** False when the project inherits its environment's default rule. */
+  /** Null when the server cannot store a rule: its settings hold only a decoded fallback. */
+  readonly rule: PullRequestFeedRule | null;
+  /** False when the project inherits its environment's default rule, or the rule is unknown. */
   readonly overridden: boolean;
   readonly access: PullRequestFeedRuleAccess;
   /** The organization whose policy locks the rule, when `access` is `managed`. */
@@ -275,8 +276,10 @@ export interface PullRequestFeedRuleRow<Project> {
   /** The project titles and environments the row covers. */
   readonly covers: string;
   readonly copies: ReadonlyArray<PullRequestFeedRuleCopy<Project>>;
-  /** The copies' one rule, or null when they differ. */
+  /** The copies' one rule, or null when they differ or no copy's rule is known. */
   readonly rule: PullRequestFeedRule | null;
+  /** False when every copy is on a server that cannot store the rule. */
+  readonly known: boolean;
   /** Inheritance, disagreement, and the copies this client cannot change, in short sentences. */
   readonly status: string;
   readonly canReset: boolean;
@@ -298,8 +301,9 @@ function pullRequestFeedRuleAccess(environment: PullRequestFeedRuleEnvironment):
   readonly access: PullRequestFeedRuleAccess;
   readonly managedBy: string | null;
 } {
-  if (!environment.connected) return { access: "disconnected", managedBy: null };
+  // Reconnecting an outdated server does not let it store the rule, so it needs the update first.
   if (!environment.capable) return { access: "outdated", managedBy: null };
+  if (!environment.connected) return { access: "disconnected", managedBy: null };
   // The server refuses a project override of a locked setting too.
   if (isManagedSettingPath(environment.managedPolicy, "pullRequestFeed")) {
     return { access: "managed", managedBy: environment.managedPolicy?.organization ?? null };
@@ -332,8 +336,9 @@ export function pullRequestFeedRuleRows<
     const copy: PullRequestFeedRuleCopy<Project> = {
       project,
       environmentLabel: environment.label,
-      rule: pullRequestFeedRule(environment.settings, project.id),
+      rule: environment.capable ? pullRequestFeedRule(environment.settings, project.id) : null,
       overridden:
+        environment.capable &&
         environment.settings.projectSettingsOverrides[project.id]?.pullRequestFeed !== undefined,
       ...pullRequestFeedRuleAccess(environment),
     };
@@ -346,14 +351,12 @@ export function pullRequestFeedRuleRows<
       });
   }
   const rows = [...groups].map(([key, { name, copies }]) => {
-    // An outdated server reports its decoded fallback, not a stored rule; its note says so.
-    const stored = copies.some((copy) => copy.access !== "outdated")
-      ? copies.filter((copy) => copy.access !== "outdated")
-      : copies;
-    const rules = unique(stored.map((copy) => copy.rule)) as PullRequestFeedRule[];
+    const stored = copies.filter((copy) => copy.rule !== null);
+    const rules = [...new Set(stored.flatMap((copy) => (copy.rule === null ? [] : [copy.rule])))];
     const rule = rules.length === 1 ? rules[0]! : null;
     const notes: string[] = [];
-    if (rule === null) {
+    // With no known rule there is nothing to compare; the access notes say why.
+    if (stored.length > 0 && rule === null) {
       const parts = rules.map((candidate) => {
         const on = unique(
           stored.filter((copy) => copy.rule === candidate).map((copy) => copy.environmentLabel),
@@ -361,7 +364,7 @@ export function pullRequestFeedRuleRows<
         return `${ruleLabel(candidate)} on ${on.join(", ")}`;
       });
       notes.push(`Differs: ${parts.join("; ")}.`);
-    } else if (stored.every((copy) => !copy.overridden)) {
+    } else if (stored.length > 0 && stored.every((copy) => !copy.overridden)) {
       notes.push("Default rule.");
     }
     for (const access of ["disconnected", "outdated", "read-only"] as const) {
@@ -388,6 +391,7 @@ export function pullRequestFeedRuleRows<
       ).join(", ")}`,
       copies,
       rule,
+      known: stored.length > 0,
       status: notes.join(" "),
       canReset: copies.some((copy) => copy.overridden && copy.access === "writable"),
     };

@@ -39,10 +39,9 @@ vi.mock("react-native", () => ({
 vi.mock("@effect/atom-react", async () => {
   const { createContext } = await import("react");
   return {
-    // Empty server configs and no pending saves; a Map also spreads to an empty list.
-    RegistryContext: createContext({ get: () => new Map(), set: () => {} }),
-    useAtomValue: (atom: { readonly label?: readonly [string, string] }) =>
-      atom?.label?.[0] === "mobile-settings:pending-writes" ? [] : AsyncResult.success({}),
+    // The settings writer reads the cached configs, empty here.
+    RegistryContext: createContext({ get: () => new Map() }),
+    useAtomValue: () => AsyncResult.success({}),
     useAtomSet: () => () => {},
   };
 });
@@ -209,8 +208,11 @@ describe("SettingsServerControlsRouteScreen", () => {
     mocks.updateSettings.mockReturnValueOnce(pending.promise);
     act(() => root.render(<SettingsWorktreesRouteScreen />));
 
-    act(() => mocks.branchNaming.onChange({ branchNamingMode: "custom" }));
-    act(() => mocks.branchNaming.onChange({ branchNameInstructions: "Use issue IDs." }));
+    // Saves start on the settings writer's queue, a microtask after the change.
+    await act(async () => mocks.branchNaming.onChange({ branchNamingMode: "custom" }));
+    await act(async () =>
+      mocks.branchNaming.onChange({ branchNameInstructions: "Use issue IDs." }),
+    );
     expect(mocks.updateSettings).toHaveBeenCalledOnce();
 
     await act(async () => pending.resolve(AsyncResult.success(undefined)));
@@ -234,8 +236,8 @@ describe("SettingsServerControlsRouteScreen", () => {
         (button) => button.textContent === label,
       )!;
 
-    act(() => toggle("Agent browser access").click());
-    act(() => toggle("Auto-settle merged threads").click());
+    await act(async () => toggle("Agent browser access").click());
+    await act(async () => toggle("Auto-settle merged threads").click());
 
     // Both rewrite the whole project override, so a second write planned now would drop the first.
     expect(mocks.updateSettings).toHaveBeenCalledOnce();
