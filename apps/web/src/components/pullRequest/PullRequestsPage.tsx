@@ -780,10 +780,8 @@ export function PullRequestsPage() {
     (project) => feed.ruleCounts(project.environmentId),
     feed.ruleFor,
   );
-  // The menu checks the same rules that decide the row.
-  const showRowMenu: PullRequestRowMenu = useStableCallback(
-    (entry, openLabel, position, source) =>
-      feed.showRowMenu(entry, openLabel, position, rulesFor(entry), source),
+  const showRowMenu: PullRequestRowMenu = useStableCallback((entry, openLabel, position, source) =>
+    feed.showRowMenu(entry, openLabel, position, projects, source),
   );
   const {
     listedPullRequestTabStatuses,
