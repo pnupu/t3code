@@ -18,9 +18,12 @@ import { isJavaScriptReplTool } from "@t3tools/shared/toolActivity";
 import { ExternalLinkIcon } from "lucide-react";
 import { memo, type ReactNode, Suspense, use } from "react";
 
-import { canOpenLinksInApp, resolveLinkTarget } from "../../browser/browserLinkTarget";
+import {
+  canOpenLinkIn,
+  resolveLinkTarget,
+  useLinkTargetSettings,
+} from "../../browser/browserLinkTarget";
 import { useOpenLink } from "../../browser/useOpenLink";
-import { useClientSettings } from "../../hooks/useSettings";
 import { useRenderedAppearance } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
@@ -210,7 +213,7 @@ function WebSearchResultLink(props: {
 }) {
   const openLink = useOpenLink(props.threadRef);
   // Subscribe so the synchronous _blank decision sees hydrated settings, as ChatMarkdown does.
-  const linkTargetPreference = useClientSettings((settings) => settings.browserLinkTarget);
+  const linkTargetSettings = useLinkTargetSettings();
   return (
     <a
       href={props.href}
@@ -222,9 +225,9 @@ function WebSearchResultLink(props: {
           resolveLinkTarget({
             url: props.href,
             event,
-            preference: linkTargetPreference,
-            canOpenInApp: canOpenLinksInApp(props.threadRef),
-          }) !== "app"
+            settings: linkTargetSettings,
+            canOpenIn: (target) => canOpenLinkIn(props.threadRef, target),
+          }) === "system"
         ) {
           return;
         }

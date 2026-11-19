@@ -124,6 +124,8 @@ export type BrowserDefaultSettings = Pick<
   | "browserRecordingShowKeyPresses"
   | "browserRecordingShowMousePresses"
   | "browserLinkTarget"
+  | "browserModClickLinkTarget"
+  | "browserModShiftClickLinkTarget"
   | "browserSearchEngine"
   | "browserCustomSearchUrl"
   | "browserAutoShowFloatingPreview"
@@ -166,6 +168,13 @@ export function getChangedBrowserSettingLabels(
     ...(settings.browserRecordingShowMousePresses ? [resolve(msg("Recording mouse presses"))] : []),
     ...(settings.browserLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserLinkTarget
       ? [resolve(msg("Open links in"))]
+      : []),
+    ...(settings.browserModClickLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserModClickLinkTarget
+      ? ["Cmd/Ctrl-click links"]
+      : []),
+    ...(settings.browserModShiftClickLinkTarget !==
+    DEFAULT_UNIFIED_SETTINGS.browserModShiftClickLinkTarget
+      ? ["Cmd/Ctrl+Shift-click links"]
       : []),
     ...(settings.browserSearchEngine !== DEFAULT_UNIFIED_SETTINGS.browserSearchEngine ||
     settings.browserCustomSearchUrl !== DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl

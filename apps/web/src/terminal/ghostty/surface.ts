@@ -1458,7 +1458,8 @@ export class GhosttyTerminalSurface {
     if (!isTerminalPrimaryPress(event)) return;
     const clickCount = this.recordSelectionClick(event);
     const link = this.linkAt(event.clientX, event.clientY, true);
-    if (link && !event.shiftKey && clickCount === 1) {
+    // Shift alone extends the selection; Cmd/Ctrl+Shift opens the link in its own target.
+    if (link && (!event.shiftKey || event.metaKey || event.ctrlKey) && clickCount === 1) {
       event.preventDefault();
       event.stopPropagation();
       this.linkActivationPointerId = event.pointerId;
