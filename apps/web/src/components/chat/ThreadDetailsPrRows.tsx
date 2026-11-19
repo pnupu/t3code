@@ -43,6 +43,7 @@ function ThreadDetailsPrLinkRow({
   onActed,
   onStopWatching,
   composerTarget,
+  threadRef,
 }: {
   environmentId: EnvironmentId;
   link: ThreadPullRequestLink;
@@ -50,6 +51,7 @@ function ThreadDetailsPrLinkRow({
   onActed?: (() => void) | undefined;
   onStopWatching?: (() => void) | undefined;
   composerTarget?: ComposerThreadTarget | undefined;
+  threadRef: ScopedThreadRef;
 }) {
   const m = useMessages();
   const projects = useProjects();
@@ -75,6 +77,7 @@ function ThreadDetailsPrLinkRow({
       onOpen={onOpen}
       onStopWatching={onStopWatching}
       composerTarget={composerTarget}
+      threadRef={threadRef}
       {...(onActed ? { onActed } : {})}
     />
   );
@@ -108,7 +111,9 @@ function ThreadDetailsPrRows({
               watching: false,
             },
           });
-  const currentRow = <ThreadDetailsPrRow {...row} onStopWatching={stopWatching(currentLink)} />;
+  const currentRow = (
+    <ThreadDetailsPrRow {...row} threadRef={threadRef} onStopWatching={stopWatching(currentLink)} />
+  );
   const rest =
     currentLink === null
       ? []
@@ -131,6 +136,7 @@ function ThreadDetailsPrRows({
               onActed={row.onActed}
               onStopWatching={stopWatching(link)}
               composerTarget={row.composerTarget}
+              threadRef={threadRef}
             />
           ))}
         </div>
