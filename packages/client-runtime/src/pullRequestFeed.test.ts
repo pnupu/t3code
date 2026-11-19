@@ -15,7 +15,7 @@ import {
   pullRequestFeedShows,
   pullRequestFeedRuleRows,
   type PullRequestFeedGroup,
-  type PullRequestFeedRuleAccess,
+  type PullRequestFeedRuleEnvironment,
 } from "./pullRequestFeed.ts";
 
 const projectA = ProjectId.make("project-a");
@@ -236,14 +236,20 @@ describe("pull request feed rule rows", () => {
     projects: ReadonlyArray<ReturnType<typeof project>>,
     environments: Record<
       string,
-      { settings: ReturnType<typeof settings>; access?: PullRequestFeedRuleAccess }
+      Partial<PullRequestFeedRuleEnvironment> & { settings: ReturnType<typeof settings> }
     >,
   ) =>
     pullRequestFeedRuleRows(projects, (environmentId) => {
       const environment = environments[environmentId];
       return environment === undefined
         ? undefined
-        : { label: environmentId, access: "writable", ...environment };
+        : {
+            label: environmentId,
+            connected: true,
+            capable: true,
+            writeGranted: true,
+            ...environment,
+          };
     });
 
   it("groups a repository's copies into one row and gives an unidentified project its own", () => {
@@ -283,14 +289,28 @@ describe("pull request feed rule rows", () => {
   });
 
   it("says which copies this client cannot change and resets only writable ones", () => {
-    const [row] = rows([project("laptop", "web", "k"), project("server", "web", "k")], {
-      laptop: { settings: settings("all"), access: "disconnected" },
-      server: { settings: settings("all", { web: "all" }), access: "read-only" },
-    });
+    const [row] = rows(
+      [project("laptop", "web", "k"), project("server", "web", "k"), project("corp", "web", "k")],
+      {
+        laptop: { settings: settings("all"), connected: false },
+        server: { settings: settings("all", { web: "all" }), writeGranted: false },
+        // The server refuses a project override of a locked setting.
+        corp: {
+          settings: settings("all", { web: "all" }),
+          managedPolicy: { organization: "Acme", lockedSettings: ["pullRequestFeed"] },
+        },
+      },
+    );
     expect(row).toMatchObject({
       rule: "all",
-      status: "Connect laptop to change it. This connection cannot change settings on server.",
+      status:
+        "Connect laptop to change it. This connection cannot change settings on server. Managed by Acme on corp.",
       canReset: false,
     });
+    expect(row?.copies.map((copy) => copy.access)).toEqual([
+      "disconnected",
+      "read-only",
+      "managed",
+    ]);
   });
 });
