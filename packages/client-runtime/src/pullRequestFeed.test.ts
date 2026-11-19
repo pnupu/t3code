@@ -295,6 +295,17 @@ describe("pull request feed rule rows", () => {
       old: { settings: settings("all"), capable: false },
     });
     expect(row).toMatchObject({ rule: "hidden", status: "Update old to change it." });
+    // Offline, the outdated copy's fallback is still not a rule.
+    const [offline] = rows([project("laptop", "web", "k"), project("old", "web", "k")], {
+      laptop: { settings: settings("all", { web: "hidden" }) },
+      old: { settings: settings("all"), capable: false, connected: false },
+    });
+    expect(offline).toMatchObject({ rule: "hidden", status: "Update old to change it." });
+    // With no server that stores the rule, the row has no value to show.
+    const [unknown] = rows([project("old", "web", "k")], {
+      old: { settings: settings("all"), capable: false },
+    });
+    expect(unknown).toMatchObject({ rule: null, known: false, status: "Update old to change it." });
   });
 
   it("writes a pick only to writable copies not already on it", () => {

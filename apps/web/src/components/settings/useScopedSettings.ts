@@ -39,7 +39,7 @@ import {
 
 const readSettings = (environmentId: EnvironmentId) =>
   readEnvironment(environmentId)?.serverConfig?.settings ?? null;
-const writeScopedSettings = createScopedSettingsWriter(readSettings);
+const writeScopedSettings = createScopedSettingsWriter(readSettings, m);
 
 export function useScopedSettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,

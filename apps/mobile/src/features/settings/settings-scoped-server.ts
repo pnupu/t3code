@@ -12,7 +12,6 @@ import {
   clearProjectSettingsOverrides,
   resolveProjectSettings,
 } from "@t3tools/shared/projectSettings";
-import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 
 import { msg } from "gt-react-native";
 
@@ -138,54 +137,4 @@ export function planMobileScopedSettingsClear(
     environmentId,
     patch: { projectSettingsOverrides } as ServerSettingsPatch,
   }));
-}
-
-/** A save this device sent; `repliedOver` is the cached copy when the server answered. */
-export interface PendingMobileSettingsWrite {
-  readonly save: object;
-  readonly environmentId: EnvironmentId;
-  readonly patch: ServerSettingsPatch;
-  readonly repliedOver?: ServerSettings | undefined;
-}
-
-/** In flight, or saved while the cached copy still predates it. */
-const pendingWriteApplies = (write: PendingMobileSettingsWrite, cached: ServerSettings) =>
-  !("repliedOver" in write) || write.repliedOver === cached;
-
-/**
- * Cached settings with this device's unanswered saves on top. Project overrides are saved as
- * whole entries, so a plan made from the cache alone would erase a pending change to another
- * key of the same project.
- */
-export function withPendingMobileSettingsWrites<
-  T extends {
-    readonly environmentId: EnvironmentId;
-    readonly serverConfig: { readonly settings: ServerSettings };
-  },
->(targets: readonly T[], writes: readonly PendingMobileSettingsWrite[]): readonly T[] {
-  if (writes.length === 0) return targets;
-  return targets.map((target) => {
-    const cached = target.serverConfig.settings;
-    const settings = writes.reduce(
-      (current, write) =>
-        write.environmentId === target.environmentId && pendingWriteApplies(write, cached)
-          ? applyServerSettingsPatch(current, write.patch)
-          : current,
-      cached,
-    );
-    return settings === cached
-      ? target
-      : { ...target, serverConfig: { ...target.serverConfig, settings } };
-  });
-}
-
-/** Drops saves the cache has caught up with: any update after the reply answers one. */
-export function settlePendingMobileSettingsWrites(
-  writes: readonly PendingMobileSettingsWrite[],
-  settingsOf: (environmentId: EnvironmentId) => ServerSettings | undefined,
-): readonly PendingMobileSettingsWrite[] {
-  return writes.filter((write) => {
-    const cached = settingsOf(write.environmentId);
-    return cached !== undefined && pendingWriteApplies(write, cached);
-  });
 }

@@ -34,15 +34,13 @@ import { SourceControlProvidersSection } from "./components/SourceControlProvide
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { PullRequestFeedRulesSection } from "./components/PullRequestFeedRulesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
-import { pendingMobileSettingsWritesAtom, useSettingsWriter } from "./useSettingsWriter";
-import { useAtomValue } from "@effect/atom-react";
+import { useSettingsWriter } from "./useSettingsWriter";
 import {
   managedSettingReason,
   planMobileScopedSettingsClear,
   planMobileScopedSettingsPatch,
   resolveMobileSettingsTargets,
   uniformMobileSetting,
-  withPendingMobileSettingsWrites,
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
@@ -200,12 +198,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const selectedProject = projectGroups.find((group) => group.key === selectedProjectKey);
   const writableEnvironments = useEnvironmentsWithScope(selectedTargets, AuthSettingsWriteScope);
   const projectSelected = selectedProjectKey !== null;
-  const pendingSaves = useAtomValue(pendingMobileSettingsWritesAtom);
-  // Plans start from this device's unanswered saves too, such as a feed rule from the overview.
-  const targets = resolveMobileSettingsTargets(
-    withPendingMobileSettingsWrites(selectedTargets, pendingSaves),
-    projectSelected ? (selectedProject?.members.map((member) => member.project) ?? []) : null,
-  );
+  const members = projectSelected
+    ? (selectedProject?.members.map((member) => member.project) ?? [])
+    : null;
+  const targets = resolveMobileSettingsTargets(selectedTargets, members);
   const [pendingWrites, setPendingWrites] = useState(0);
   const writeInFlight = useRef(false);
   // Closing views can save after controls disable; queue those patches behind the pending write.
@@ -251,7 +247,13 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     writeInFlight.current = true;
     setPendingTargets(targets);
     setPendingWrites((count) => count + 1);
-    void writeSettings(targets, writes).finally(() => {
+    void writeSettings(selectedTargets, (current) =>
+      planServerSettingsWrites(
+        resolveMobileSettingsTargets(current, members),
+        projectSelected,
+        patch,
+      ),
+    ).finally(() => {
       writeInFlight.current = false;
       setPendingTargets(null);
       setPendingWrites((count) => count - 1);
@@ -275,7 +277,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     writeInFlight.current = true;
     setPendingTargets(targets);
     setPendingWrites((count) => count + 1);
-    void writeSettings(targets, writes).finally(() => {
+    const keys = PAGE_PROJECT_KEYS[props.page];
+    void writeSettings(selectedTargets, (current) =>
+      planMobileScopedSettingsClear(resolveMobileSettingsTargets(current, members), keys),
+    ).finally(() => {
       writeInFlight.current = false;
       // Resending a draft over these pre-clear targets would undo the clear.
       queuedPatch.current = null;
