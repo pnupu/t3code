@@ -632,6 +632,23 @@ describe("GhosttyTerminalSurface visibility", () => {
   });
 
   it.each([
+    { modifiers: { shiftKey: true }, activates: false },
+    { modifiers: { shiftKey: true, metaKey: true }, activates: true },
+    { modifiers: { shiftKey: true, ctrlKey: true }, activates: true },
+  ])("shift-clicks a link with $modifiers", async ({ modifiers, activates }) => {
+    const harness = createHarness();
+    const onLinkActivate = vi.fn();
+    const surface = await harness.create({ onLinkActivate });
+    surface.write("https://example.com");
+    harness.flushFrame();
+
+    harness.pointer("pointerdown", 5, 1, modifiers);
+    harness.pointer("pointerup", 5, 0, modifiers);
+
+    expect(onLinkActivate).toHaveBeenCalledTimes(activates ? 1 : 0);
+  });
+
+  it.each([
     { scenario: "missing", exists: false },
     { scenario: "file", exists: true },
     { scenario: "replaced", exists: true },

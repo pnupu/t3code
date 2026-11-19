@@ -320,6 +320,11 @@ export {
 export const BrowserLinkTarget = Schema.Literals(["system", "app"]);
 export type BrowserLinkTarget = typeof BrowserLinkTarget.Type;
 export const DEFAULT_BROWSER_LINK_TARGET: BrowserLinkTarget = "system";
+/** Where a modified link click opens: "local" is this client's browser, "environment" the thread's machine. */
+export const BrowserModifiedLinkTarget = Schema.Literals(["system", "local", "environment"]);
+export type BrowserModifiedLinkTarget = typeof BrowserModifiedLinkTarget.Type;
+export const DEFAULT_BROWSER_MOD_CLICK_LINK_TARGET: BrowserModifiedLinkTarget = "local";
+export const DEFAULT_BROWSER_MOD_SHIFT_CLICK_LINK_TARGET: BrowserModifiedLinkTarget = "environment";
 /**
  * Where a plain click opens a subagent, a side chat or a linked environment's thread: beside the
  * thread you are in, or in its place. A modified click opens it in the other one.
@@ -461,6 +466,12 @@ export const ClientSettingsSchema = Schema.Struct({
 
   browserLinkTarget: BrowserLinkTarget.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_LINK_TARGET)),
+  ),
+  browserModClickLinkTarget: BrowserModifiedLinkTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_MOD_CLICK_LINK_TARGET)),
+  ),
+  browserModShiftClickLinkTarget: BrowserModifiedLinkTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_MOD_SHIFT_CLICK_LINK_TARGET)),
   ),
 
   browserSearchEngine: BrowserSearchEngine.pipe(
@@ -2132,6 +2143,8 @@ export const ClientSettingsPatch = Schema.Struct({
   browserRecordingShowKeyPresses: Schema.optionalKey(Schema.Boolean),
   browserRecordingShowMousePresses: Schema.optionalKey(Schema.Boolean),
   browserLinkTarget: Schema.optionalKey(BrowserLinkTarget),
+  browserModClickLinkTarget: Schema.optionalKey(BrowserModifiedLinkTarget),
+  browserModShiftClickLinkTarget: Schema.optionalKey(BrowserModifiedLinkTarget),
   browserSearchEngine: Schema.optionalKey(BrowserSearchEngine),
   browserCustomSearchUrl: Schema.optionalKey(BrowserCustomSearchUrl),
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),

@@ -128,6 +128,11 @@ import {
   turnDiffSections,
   type TurnDiffSection,
 } from "@t3tools/client-runtime/state/thread-repositories";
+import {
+  canOpenLinkIn,
+  resolveLinkTarget,
+  useLinkTargetSettings,
+} from "../browser/browserLinkTarget";
 import { useOpenLink } from "../browser/useOpenLink";
 
 type DiffThemeType = "light" | "dark";
@@ -536,10 +541,22 @@ export default function DiffPanel({
   const selectedCommitUrl =
     headerCommitSha !== null ? projectCommitUrl(commitLinkIdentity, headerCommitSha) : null;
   const openLink = useOpenLink(routeThreadRef);
+  const linkTargetSettings = useLinkTargetSettings();
   // A SHA link goes to the code host; it must not route back into this pane's commit selection.
   const openCommitUrl = (event: MouseEvent<HTMLElement>, url: string) => {
     event.stopPropagation();
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1)
+    const mod = event.metaKey || event.ctrlKey;
+    if ((event.shiftKey && !mod) || event.altKey || event.button === 1) return;
+    // A modified click the system browser takes keeps the anchor's native open.
+    if (
+      mod &&
+      resolveLinkTarget({
+        url,
+        event,
+        settings: linkTargetSettings,
+        canOpenIn: (target) => canOpenLinkIn(routeThreadRef, target),
+      }) === "system"
+    )
       return;
     event.preventDefault();
     void openLink(url, { event });
