@@ -138,3 +138,27 @@ export function planMobileScopedSettingsClear(
     patch: { projectSettingsOverrides } as ServerSettingsPatch,
   }));
 }
+
+/**
+ * A feed rule reset plans every given copy's environment. A copy whose settings show no override
+ * gets an empty patch: it keeps a place in that environment's save queue, and when its turn comes
+ * it is planned again from the save before it, which may hold the override this reset must clear.
+ * The settings writer sends nothing for a patch that is still empty.
+ */
+export function planMobileFeedRuleReset(targets: readonly ScopedMobileSettingsTarget[]) {
+  const overridden = targets.filter(
+    (target) =>
+      target.projectId !== null &&
+      target.environment.serverConfig.settings.projectSettingsOverrides[target.projectId]
+        ?.pullRequestFeed !== undefined,
+  );
+  const writes = planMobileScopedSettingsClear(overridden, ["pullRequestFeed"]);
+  const waiting = [
+    ...new Set(
+      targets
+        .map((target) => target.environment.environmentId)
+        .filter((environmentId) => !writes.some((write) => write.environmentId === environmentId)),
+    ),
+  ].map((environmentId) => ({ environmentId, patch: {} as ServerSettingsPatch }));
+  return [...writes, ...waiting];
+}
