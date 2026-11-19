@@ -2224,6 +2224,32 @@ layer("GitHubPullRequestApi.layer", (it) => {
       });
       expect(involved).toMatchObject({ items: [], truncated: false, continues: false });
       assert.strictEqual(mockedExecute.mock.calls.length, 3);
+
+      // An empty page that has rows it could not hand over cannot be continued, so it fails.
+      // Rows GitHub sent but this client cannot read still count toward the page.
+      mockedExecute.mockReturnValueOnce(
+        Effect.succeed(
+          output(
+            encodeJson({
+              data: {
+                search: { pageInfo: lastPage, nodes: Array.from({ length: 11 }, () => ({})) },
+              },
+            }),
+          ),
+        ),
+      );
+      const stopped = yield* Effect.flip(
+        cli.listPullRequests({
+          cwd: "/w",
+          repository: "acme/web",
+          host: "github.com",
+          state: "open",
+          involvement: "involved",
+          viewer: "bilal",
+          limit: 10,
+        }),
+      );
+      assert.strictEqual(stopped._tag, "GitHubPullRequestReadError");
     }),
   );
 

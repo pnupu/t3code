@@ -2668,6 +2668,10 @@ it.effect("reads `involved` only from a host that narrows it", () =>
 
       assert.deepStrictEqual(asked, listsInvolved ? ["involved"] : []);
       assert.strictEqual(result.entries.length, listsInvolved ? 1 : 0);
+
+      // A host that ignores `authored` sends every row; only GitHub's answer is trusted as sent.
+      const authored = yield* service.list({ state: "open", involvement: "authored" });
+      assert.strictEqual(authored.entries.length, listsInvolved ? 1 : 0);
     }
   }),
 );

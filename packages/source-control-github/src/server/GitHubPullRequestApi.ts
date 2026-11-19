@@ -1963,10 +1963,19 @@ export const make = Effect.gen(function* () {
           (batch) => batch.items.length > 0 || input.cursor !== undefined || hasQuery,
           // The listing has no comments, mentions, or assignees, so it cannot answer `involved`;
           // the provider tells an empty answer from an unindexed repository.
-          () =>
-            input.involvement === "involved"
-              ? Effect.succeed({ items: [], truncated: false, continues: false })
-              : read(false),
+          // A truncated empty page has rows it could not hand over, and no cursor to reach them.
+          (batch) =>
+            input.involvement !== "involved"
+              ? read(false)
+              : batch.truncated
+                ? Effect.fail(
+                    new GitHubPullRequestReadError({
+                      cwd: input.cwd,
+                      operation: "listPullRequests",
+                      cause: new Error("The involved search stopped before its first row."),
+                    }),
+                  )
+                : Effect.succeed({ items: [], truncated: false, continues: false }),
         ),
         Effect.filterOrElse(
           (batch) => !stacks || batch.items.length === 0,

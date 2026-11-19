@@ -1441,6 +1441,19 @@ export const make = Effect.gen(function* () {
     // rows from its authored and review-requested partitions.
     const skipsInvolved = (project: SupportedProject) =>
       involvement === "involved" && project.api.listsInvolved !== true;
+    // Some hosts ignore `authored` and `reviewing` and send every row, so outside GitHub a row
+    // stays only when its own author or review requests say it involves the viewer.
+    const keepsInvolvement = (
+      project: SupportedProject,
+      item: ProviderChangeRequest,
+      viewer: string,
+    ) =>
+      project.api.listsInvolved === true ||
+      (involvement === "authored"
+        ? item.author?.login.toLowerCase() === viewer.toLowerCase()
+        : involvement === "reviewing"
+          ? item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer.toLowerCase())
+          : true);
 
     const readSlice = (
       project: SupportedProject,
@@ -1497,7 +1510,11 @@ export const make = Effect.gen(function* () {
               return {
                 key,
                 entries: items
-                  .filter((item) => matchesRowFilters(item, input.filters, viewer))
+                  .filter(
+                    (item) =>
+                      matchesRowFilters(item, input.filters, viewer) &&
+                      keepsInvolvement(project, item, viewer),
+                  )
                   .map((item) => toEntry({ project, item, viewer, observedAt })),
                 errors: [],
                 truncated: page.truncated,
@@ -1631,7 +1648,11 @@ export const make = Effect.gen(function* () {
               return Effect.succeed({
                 key: project.cursorKey,
                 entries: items
-                  .filter((item) => matchesRowFilters(item, input.filters, viewer))
+                  .filter(
+                    (item) =>
+                      matchesRowFilters(item, input.filters, viewer) &&
+                      keepsInvolvement(project, item, viewer),
+                  )
                   .map((item) => toEntry({ project, item, viewer, observedAt })),
                 errors: [],
                 truncated: page.truncated,

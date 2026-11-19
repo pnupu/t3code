@@ -245,7 +245,9 @@ export function PullRequestsScreen(
   const loadMore = (retry?: boolean) => {
     void result.loadMore(retry);
     // Only an explicit retry reruns a failed page; scrolling stops at its error.
-    if (involvedList.hasMore) void involvedList.loadMore(retry);
+    for (const list of [involvedList, authoredList, reviewingList]) {
+      if (list.hasMore) void list.loadMore(retry);
+    }
   };
   const connectedTargets = targets.filter((target) =>
     environments.some(
@@ -506,17 +508,26 @@ export function PullRequestsScreen(
           </>
         }
         ListFooterComponent={
-          result.loadingMore || involvedList.loadingMore ? (
+          result.loadingMore ||
+          involvedList.loadingMore ||
+          authoredList.loadingMore ||
+          reviewingList.loadingMore ? (
             <View className="items-center py-5">
               <AppActivityIndicator
                 colorClassName="accent-icon"
                 accessibilityLabel="Loading more pull requests"
               />
             </View>
-          ) : (result.loadMoreError ?? involvedList.loadMoreError) ? (
+          ) : (result.loadMoreError ??
+            involvedList.loadMoreError ??
+            authoredList.loadMoreError ??
+            reviewingList.loadMoreError) ? (
             <View className="items-center gap-2 px-8 py-4">
               <Text className="text-xs text-foreground-muted">
-                {result.loadMoreError ?? involvedList.loadMoreError}
+                {result.loadMoreError ??
+                  involvedList.loadMoreError ??
+                  authoredList.loadMoreError ??
+                  reviewingList.loadMoreError}
               </Text>
               <Button
                 label="Try again"
@@ -524,7 +535,10 @@ export function PullRequestsScreen(
                 onPress={() => loadMore(true)}
               />
             </View>
-          ) : result.hasMore || involvedList.hasMore ? (
+          ) : result.hasMore ||
+            involvedList.hasMore ||
+            authoredList.hasMore ||
+            reviewingList.hasMore ? (
             // A filtered page can be too short to scroll, which leaves nothing to reach the end of.
             <View className="items-center py-4">
               <Button

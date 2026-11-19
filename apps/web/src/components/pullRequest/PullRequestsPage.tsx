@@ -69,6 +69,12 @@ import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
 import { usePullRequestFeed } from "./usePullRequestFeed";
 import {
+  combinedReadState,
+  pullRequestLoadMore,
+  type PullRequestReadState,
+} from "./pullRequestLoadMore.logic";
+import { usePagedHostList } from "./usePagedHostList";
+import {
   pullRequestInvolvedMatcher,
   pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
@@ -455,9 +461,6 @@ export function PullRequestsPage() {
       ?.filter((projectId) => projectIds === undefined || projectIds.includes(projectId));
     return ruled === undefined || ruled.length === 0 ? [] : [{ environmentId, projectIds: ruled }];
   });
-  // The involved listing is a project's only source of Others rows, so Load more grows it too.
-  const [involvedPage, setInvolvedPage] = useState({ key: filterKey, size: PAGE_SIZE });
-  const involvedPageSize = involvedPage.key === filterKey ? involvedPage.size : PAGE_SIZE;
   const partitionTargets = (() => {
     // The main list goes first. Besides putting the visible rows on screen sooner, it proves
     // which repositories the host search indexes, so an empty partition does not trigger the
@@ -467,19 +470,21 @@ export function PullRequestsPage() {
       baselineQuery.data === null ||
       baselineQuery.data.entries.length === 0
     ) {
-      return { authored: NO_LIST_TARGETS, reviewing: NO_LIST_TARGETS, involved: NO_LIST_TARGETS };
+      return {
+        authored: NO_LIST_TARGETS,
+        reviewing: NO_LIST_TARGETS,
+        involved: NO_LIST_TARGETS,
+        involvedAuthored: NO_LIST_TARGETS,
+        involvedReviewing: NO_LIST_TARGETS,
+      };
     }
-    const targetsFor = (
-      involvement: PullRequestInvolvement,
-      queries = environmentQueries,
-      limit = PAGE_SIZE,
-    ) =>
+    const targetsFor = (involvement: PullRequestInvolvement, queries = environmentQueries) =>
       queries.map(({ environmentId, projectIds }) => ({
         environmentId,
         input: {
           state: search.state,
           involvement,
-          limit,
+          limit: PAGE_SIZE,
           ...(scopedProjectId ? { projectId: scopedProjectId } : {}),
           ...(projectIds ? { projectIds } : {}),
           ...(search.host ? { host: search.host } : {}),
@@ -489,12 +494,47 @@ export function PullRequestsPage() {
     return {
       authored: targetsFor("authored"),
       reviewing: targetsFor("reviewing"),
-      involved: targetsFor("involved", involvedQueries, involvedPageSize),
+      // A project on the rule pages these three on their own; only the involved listing decides
+      // membership, the other two bring rows the main list has not reached.
+      involved: targetsFor("involved", involvedQueries),
+      involvedAuthored: targetsFor("authored", involvedQueries),
+      involvedReviewing: targetsFor("reviewing", involvedQueries),
     };
   })();
   const authoredQuery = usePullRequestHostList(partitionTargets.authored);
   const reviewingQuery = usePullRequestHostList(partitionTargets.reviewing);
-  const involvedQuery = usePullRequestHostList(partitionTargets.involved);
+  const involvedKey = `${filterKey}:${JSON.stringify(involvedQueries)}`;
+  const involvedListing = usePagedHostList(
+    partitionTargets.involved,
+    involvedKey,
+    turnRefreshToken,
+    PAGE_SIZE,
+    MAX_PAGE_SIZE,
+  );
+  const involvedAuthoredListing = usePagedHostList(
+    partitionTargets.involvedAuthored,
+    involvedKey,
+    turnRefreshToken,
+    PAGE_SIZE,
+    MAX_PAGE_SIZE,
+  );
+  const involvedReviewingListing = usePagedHostList(
+    partitionTargets.involvedReviewing,
+    involvedKey,
+    turnRefreshToken,
+    PAGE_SIZE,
+    MAX_PAGE_SIZE,
+  );
+  const involvedListings = [involvedListing, involvedAuthoredListing, involvedReviewingListing];
+  const involvedHeld = partitionsWanted ? involvedListing.rows : null;
+  const involvedCandidates = (() => {
+    if (involvedHeld === null) return undefined;
+    const byUrl = new Map<string, EnvironmentPullRequestEntry>();
+    for (const listing of involvedListings) {
+      for (const entry of listing.rows?.entries ?? []) byUrl.set(entry.url, entry);
+    }
+    return [...byUrl.values()];
+  })();
   const invalidate = useAtomCommand(pullRequestEnvironment.invalidate, { reportFailure: false });
   const [detailRefreshToken, setDetailRefreshToken] = useState(0);
   const [invalidating, setInvalidating] = useState(false);
@@ -692,19 +732,30 @@ export function PullRequestsPage() {
     (environmentId) => nextCursors[environmentId] === undefined,
   );
   const canContinue = !showingCarried && Object.keys(nextCursors).length > 0;
-  // The involved read grows with each Load more unless its latest answer is complete.
-  const involvedCanGrow =
-    partitionsWanted && partitionTargets.involved.length > 0 && involvedPageSize < MAX_PAGE_SIZE;
-  const involvedTruncated = involvedCanGrow && involvedQuery.data?.truncated === true;
+  const mainRead: PullRequestReadState =
+    listData?.truncated !== true
+      ? "complete"
+      : loadingMore
+        ? "pending"
+        : !(canContinue || pageSize < MAX_PAGE_SIZE)
+          ? "capped"
+          : listQuery.error !== null
+            ? "failed"
+            : "truncated";
+  const involvedReadState = partitionsWanted
+    ? combinedReadState(involvedListings.map((listing) => listing.state))
+    : null;
+  const loadMorePlan = pullRequestLoadMore(mainRead, involvedReadState);
   const loadMore = () => {
-    if (involvedCanGrow && involvedQuery.data?.truncated !== false) {
-      setInvolvedPage({
-        key: filterKey,
-        size: Math.min(involvedPageSize + PAGE_SIZE, MAX_PAGE_SIZE),
-      });
+    if (loadMorePlan.growInvolved) {
+      for (const listing of involvedListings) listing.advance();
     }
-    // A complete main list is not read again when only the involved read has more.
-    if (listData?.truncated !== true) return;
+    if (!loadMorePlan.growMain) return;
+    // The failed page's cursors are the ones held, so asking with them again needs a refresh.
+    if (mainRead === "failed") {
+      listQuery.refresh();
+      return;
+    }
     if (canContinue) {
       setPage({
         key: filterKey,
@@ -743,6 +794,7 @@ export function PullRequestsPage() {
   if (sentCursors !== null && page.turn !== turnRefreshToken) setPage(collapsedPage());
 
   const refreshList = (includeRelated = false, actedEnvironmentId?: EnvironmentId) => {
+    if (includeRelated) for (const listing of involvedListings) listing.refresh();
     const related = (
       includeRelated
         ? [
@@ -750,7 +802,6 @@ export function PullRequestsPage() {
             ...facetTargets,
             ...partitionTargets.authored,
             ...partitionTargets.reviewing,
-            ...partitionTargets.involved,
           ]
         : []
     ).filter(
@@ -805,53 +856,25 @@ export function PullRequestsPage() {
   );
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
-  // The last answer stays while the read has none, so Involving me rows do not jump. An
-  // environment that has not answered or failed is one the matcher cannot rule on.
-  // While a grown read travels, the last answer for the same projects and filters stays.
-  const involvedKey = JSON.stringify(
-    partitionTargets.involved.map((target) => ({
-      ...target,
-      input: { ...target.input, limit: 0 },
-    })),
-  );
-  const answeredInvolved =
-    involvedQuery.data === null
-      ? null
-      : { answer: involvedQuery.data, answered: involvedQuery.answered };
-  const [heldInvolved, setHeldInvolved] = useState<{
-    key: string;
-    answer: MergedPullRequestList;
-    answered: ReadonlyArray<EnvironmentId>;
-  } | null>(null);
-  if (
-    answeredInvolved !== null &&
-    (heldInvolved?.key !== involvedKey || heldInvolved.answer !== answeredInvolved.answer)
-  ) {
-    setHeldInvolved({ key: involvedKey, ...answeredInvolved });
-  }
-  const involvedRead = !partitionsWanted
-    ? null
-    : (answeredInvolved ?? (heldInvolved?.key === involvedKey ? heldInvolved : null));
-  const involvedAnswer = involvedRead?.answer ?? null;
-  const shownInvolved = usePendingListEntries(overlayInput, involvedAnswer?.entries);
+  const shownInvolved = usePendingListEntries(overlayInput, involvedCandidates);
   // A project's listing is ready once its environment answered without failing and the project
   // itself was read without error; until then its rows show as under the All rule.
-  // lean: the involved read stops at MAX_PAGE_SIZE rows per environment, so older Others rows of
-  // a project on the rule stay hidden past it. Revisit if someone is involved in more than that.
+  // lean: a host that says it has more without a cursor ends its involved listing at the first
+  // page, so older Others rows of a project on the rule stay hidden there. Revisit if one does.
   const involved = pullRequestInvolvedMatcher(
-    involvedRead === null
+    involvedHeld === null
       ? null
       : {
-          entries: involvedRead.answer.entries,
+          entries: involvedHeld.entries,
           ready: (entry: EnvironmentPullRequestEntry) =>
-            involvedRead.answered.includes(entry.environmentId) &&
-            !involvedQuery.failed.includes(entry.environmentId) &&
+            involvedHeld.answered.includes(entry.environmentId) &&
+            !involvedListing.failed.includes(entry.environmentId) &&
             involvedQueries.some(
               (query) =>
                 query.environmentId === entry.environmentId &&
                 query.projectIds.some((id) => id === entry.projectId),
             ) &&
-            !involvedRead.answer.errors.some(
+            !involvedHeld.errors.some(
               (error) =>
                 error.environmentId === entry.environmentId && error.projectId === entry.projectId,
             ),
@@ -900,7 +923,7 @@ export function PullRequestsPage() {
           },
     authored: partitionsWanted && authoredQuery.data !== null ? shownAuthored : undefined,
     reviewing: partitionsWanted && reviewingQuery.data !== null ? shownReviewing : undefined,
-    involved: involvedAnswer === null ? undefined : shownInvolved,
+    involved: involvedHeld === null ? undefined : shownInvolved,
     partitionsWanted,
     feed: {
       scopedToProject: scopedProjectId !== undefined,
@@ -1403,10 +1426,7 @@ export function PullRequestsPage() {
             projects.some(feed.hidesRepository)
           }
           searching={typedQuery.length > 0 && (!querySettled || showingCarried)}
-          canLoadMore={
-            (listData?.truncated === true || involvedTruncated) &&
-            (canContinue || pageSize < MAX_PAGE_SIZE || involvedTruncated)
-          }
+          canLoadMore={loadMorePlan.footer === "button"}
           loadingMore={loadingMore}
           onClearQuery={() => updateListScope({ q: undefined })}
           onLoadMore={loadMore}
@@ -1447,22 +1467,18 @@ export function PullRequestsPage() {
       ) : null}
       {/* The error view replaces an emptied page, so it keeps this footer's way to more pages. */}
       {pullRequestsSupported &&
-      (listData?.truncated === true || involvedTruncated) &&
-      (shownCount > 0 ||
-        (listError !== null && (canContinue || pageSize < MAX_PAGE_SIZE || involvedTruncated))) ? (
+      loadMorePlan.footer !== null &&
+      (shownCount > 0 || (listError !== null && loadMorePlan.footer !== "narrow")) ? (
         <div className="flex justify-center py-3 text-xs text-muted-foreground">
-          {loadingMore ? (
+          {loadMorePlan.footer === "loading" ? (
             <span className="flex items-center gap-2">
               <Spinner aria-hidden size="sm" />
-              {sentCursors === null ? "Updating pull requests" : "Loading more"}
+              {sentCursors === null && involvedReadState !== "pending"
+                ? "Updating pull requests"
+                : "Loading more"}
             </span>
-          ) : canContinue || pageSize < MAX_PAGE_SIZE || involvedTruncated ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={loadMore}
-              disabled={listQuery.isPending || showingCarried}
-            >
+          ) : loadMorePlan.footer === "button" ? (
+            <Button size="sm" variant="outline" onClick={loadMore} disabled={showingCarried}>
               Load more pull requests
             </Button>
           ) : (
