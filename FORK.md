@@ -10,8 +10,12 @@ stable tag with the fork commits rebased on top, so it is force-pushed on every 
 2. Every push to `main` runs `.github/workflows/fork-release.yml`: typecheck, the tests
    beside fork changes, a Linux x64 desktop build and CLI archive, and a macOS arm64 build
    re-signed with the fork's self-signed identity. It publishes `vX.Y.(Z*1000+n)`, so
-   upstream `v0.1.4` becomes `0.1.4001`, `0.1.4002`, and so on.
-3. The desktop app offers the release; its update button moves every connected server.
+   upstream `v0.1.4` becomes `0.1.4001`, `0.1.4002`, and so on. GitHub sometimes turns
+   that workflow off (#34), so `fork-release-watch.yml` turns it on again and starts it for
+   an unreleased `main`, on each push and every 15 minutes. To pause releases, turn off
+   both workflows.
+3. The desktop app checks every 15 minutes and downloads a new release in the background;
+   its restart button installs it and moves every connected server.
 
 A conflict or a failed release opens a `fork-sync` issue and publishes nothing, so
 machines stay on the last release.
