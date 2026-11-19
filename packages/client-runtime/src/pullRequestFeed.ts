@@ -85,6 +85,27 @@ export function pullRequestFeedShows(
   }
 }
 
+/**
+ * Reads the host's `involved` listing for `PullRequestFeedOptions.involved`. A row it cannot rule
+ * on counts as involved: with no answer yet, a failed read, or a row older than a listing that
+ * stopped at a page, so the rule never hides a row the host would list.
+ */
+export function pullRequestInvolvedMatcher(
+  answer: {
+    readonly entries: ReadonlyArray<{ readonly url: string; readonly updatedAt: string }>;
+    readonly complete: boolean;
+  } | null,
+): (entry: { readonly url: string; readonly updatedAt: string }) => boolean {
+  if (answer === null) return () => true;
+  const urls = new Set(answer.entries.map((entry) => entry.url));
+  if (answer.complete) return (entry) => urls.has(entry.url);
+  let oldest: string | null = null;
+  for (const entry of answer.entries) {
+    if (oldest === null || entry.updatedAt < oldest) oldest = entry.updatedAt;
+  }
+  return (entry) => urls.has(entry.url) || oldest === null || entry.updatedAt < oldest;
+}
+
 type HiddenSettings = Pick<ServerSettings, "hiddenPullRequests"> | null | undefined;
 
 /** The key a hidden link is stored under; hiding or unhiding patches only this key. */

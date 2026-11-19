@@ -18,6 +18,7 @@ import {
   pullRequestFeedGroup,
   pullRequestFeedRule,
   pullRequestFeedShows,
+  pullRequestInvolvedMatcher,
   type PullRequestFeedGroup,
 } from "./pullRequestFeed.ts";
 
@@ -47,6 +48,18 @@ describe("pull request feed rules", () => {
     ["involved", "others", "authored", true],
   ])("%s shows a %s row under %s: %s", (rule, group, involvement, shown, involved) => {
     expect(pullRequestFeedShows(rule, group, involvement, involved)).toBe(shown);
+  });
+
+  it("counts a row the involved listing cannot rule on as involved", () => {
+    const row = (url: string, updatedAt: string) => ({ url, updatedAt });
+    const listed = [row("https://h/a/2", "2026-07-02")];
+    expect(pullRequestInvolvedMatcher(null)(row("https://h/a/1", "2026-07-03"))).toBe(true);
+    const complete = pullRequestInvolvedMatcher({ entries: listed, complete: true });
+    expect(complete(row("https://h/a/2", "2026-07-02"))).toBe(true);
+    expect(complete(row("https://h/a/1", "2026-07-01"))).toBe(false);
+    const paged = pullRequestInvolvedMatcher({ entries: listed, complete: false });
+    expect(paged(row("https://h/a/3", "2026-07-03"))).toBe(false);
+    expect(paged(row("https://h/a/1", "2026-07-01"))).toBe(true);
   });
 
   it("resolves a project override over the environment rule", () => {

@@ -68,7 +68,10 @@ import { INVOLVEMENT_TABS, SORT_OPTIONS, STATE_TABS } from "./pullRequestListOpt
 import { PullRequestsColumn } from "./PullRequestsColumn";
 import { PullRequestListGroups } from "./PullRequestListGroups";
 import { usePullRequestFeed } from "./usePullRequestFeed";
-import { pullRequestRepositoryRules } from "@t3tools/client-runtime/pull-request-feed";
+import {
+  pullRequestInvolvedMatcher,
+  pullRequestRepositoryRules,
+} from "@t3tools/client-runtime/pull-request-feed";
 import { pullRequestPanelReference } from "./usePullRequestDetail";
 import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
 import {
@@ -777,8 +780,14 @@ export function PullRequestsPage() {
   );
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
-  const involvedUrls = new Set(
-    (partitionsWanted ? involvedQuery.data?.entries : undefined)?.map((entry) => entry.url),
+  const involvedAnswer = partitionsWanted ? involvedQuery.data : null;
+  const involved = pullRequestInvolvedMatcher(
+    involvedAnswer == null || involvedAnswer.errors.length > 0
+      ? null
+      : {
+          entries: involvedAnswer.entries,
+          complete: involvedAnswer.truncatedEnvironments.length === 0,
+        },
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHidden, setShowHidden] = useState(false);
@@ -829,7 +838,7 @@ export function PullRequestsPage() {
       rulesFor,
       hidden: feed.hidden,
       repositoryHidden: feed.repositoryHidden,
-      involved: (entry) => involvedUrls.has(entry.url),
+      involved,
       showHidden,
     },
   });

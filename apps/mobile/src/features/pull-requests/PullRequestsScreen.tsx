@@ -37,6 +37,7 @@ import {
   isPullRequestHidden,
   pullRequestFeedGroup,
   pullRequestFeedVisibility,
+  pullRequestInvolvedMatcher,
   pullRequestRepositoryHidden,
   pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
@@ -196,8 +197,11 @@ export function PullRequestsScreen(
           ),
     [controls.involvement, involvedEnvironmentIds, targets],
   );
-  const involvedUrls = new Set(
-    usePullRequestList(involvedTargets).entries.map((entry) => entry.url),
+  const involvedList = usePullRequestList(involvedTargets);
+  const involved = pullRequestInvolvedMatcher(
+    involvedTargets.length === 0 || involvedList.isPending || involvedList.error !== null
+      ? null
+      : { entries: involvedList.entries, complete: !involvedList.hasMore },
   );
   const connectedTargets = targets.filter((target) =>
     environments.some(
@@ -248,7 +252,7 @@ export function PullRequestsScreen(
         rulesFor,
         hidden: feed.hidden,
         repositoryHidden,
-        involved: (row) => involvedUrls.has(row.url),
+        involved,
       },
     ),
   );
