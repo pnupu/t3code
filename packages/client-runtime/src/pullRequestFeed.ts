@@ -99,7 +99,7 @@ export interface PullRequestFeedOptions<Entry> {
   /** Rules apply only to the combined feed, not when the list shows one project. */
   readonly scopedToProject: boolean;
   readonly involvement: PullRequestInvolvement;
-  /** The rules of the row's copies; the row shows when any of them shows it. */
+  /** The rules of the row's counted copies, else its own; the row shows when any of them shows it. */
   readonly rulesFor: (entry: Entry) => ReadonlyArray<PullRequestFeedRule>;
   readonly hidden: ReadonlySet<string>;
   /** The row's own group, when the list may file it under another one. */

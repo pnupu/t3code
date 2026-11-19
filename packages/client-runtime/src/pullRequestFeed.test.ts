@@ -187,6 +187,14 @@ describe("pull request feed rules", () => {
     expect(counted({ environmentId: "env-3", projectId: ProjectId.make("x") })).toEqual([
       "authored",
     ]);
+    // A keyed repository with no counted copy falls back to the row's own rule, not to no rule.
+    const uncounted = pullRequestRepositoryRules(
+      [project("env-1", "a1"), project("env-2", "a2")],
+      () => "authored",
+      () => false,
+      () => "reviewing",
+    );
+    expect(uncounted(row)).toEqual(["reviewing"]);
   });
 
   it("reads every environment's hidden links, regardless of case", () => {

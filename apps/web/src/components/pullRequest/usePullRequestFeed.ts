@@ -7,6 +7,7 @@ import {
   pullRequestFeedRule,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
+  pullRequestRepositoryRules,
 } from "@t3tools/client-runtime/pull-request-feed";
 import {
   AuthSettingsWriteScope,
@@ -110,11 +111,15 @@ export function usePullRequestFeed() {
     );
   };
 
-  // Like Settings' project scope, every environment's copy of the repository gets the rule.
-  const setProjectRule = (
-    project: { environmentId: EnvironmentId; projectId: ProjectId },
-    rule: PullRequestFeedRule,
-  ) => {
+  const rowRules = pullRequestRepositoryRules(
+    projects,
+    (project) => ruleFor({ environmentId: project.environmentId, projectId: project.id }),
+    (project) => ruleCounts(project.environmentId),
+    ruleFor,
+  );
+
+  // Like Settings' project scope, every writable copy of the repository gets the rule.
+  const ruleMembers = (project: { environmentId: EnvironmentId; projectId: ProjectId }) => {
     const repositoryKeyOf = (candidate: (typeof projects)[number] | undefined) =>
       candidate?.repositoryIdentity?.canonicalKey?.toLowerCase();
     const key = repositoryKeyOf(
@@ -123,11 +128,21 @@ export function usePullRequestFeed() {
           candidate.environmentId === project.environmentId && candidate.id === project.projectId,
       ),
     );
-    const members = key
-      ? projects.filter(
-          (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
-        )
-      : [{ id: project.projectId, environmentId: project.environmentId }];
+    if (key) {
+      return projects.filter(
+        (candidate) => repositoryKeyOf(candidate) === key && canWrite(candidate.environmentId),
+      );
+    }
+    return canWrite(project.environmentId)
+      ? [{ id: project.projectId, environmentId: project.environmentId }]
+      : [];
+  };
+
+  const setProjectRule = (
+    project: { environmentId: EnvironmentId; projectId: ProjectId },
+    rule: PullRequestFeedRule,
+  ) => {
+    const members = ruleMembers(project);
     runPlan(environments, (current) =>
       planProjectOverridePatch(current, members, { pullRequestFeed: rule }),
     );
@@ -141,7 +156,7 @@ export function usePullRequestFeed() {
     const api = readLocalApi();
     if (!api) return;
     const isHidden = isPullRequestHidden(hidden, entry.url);
-    const rule = ruleFor(entry);
+    const rules = rowRules(entry);
     const writable = canWrite(entry.environmentId);
     const items: ContextMenuItem<FeedMenuAction>[] = [
       { id: "copy-link", label: "Copy link", icon: "copy" },
@@ -160,11 +175,11 @@ export function usePullRequestFeed() {
       {
         id: "rule:all",
         label: `Feed for ${entry.projectTitle}`,
-        disabled: !writable,
+        disabled: ruleMembers(entry).length === 0,
         children: PULL_REQUEST_FEED_RULES.map((option) => ({
           id: `rule:${option.value}` as const,
           label: option.label,
-          checked: option.value === rule,
+          checked: rules.includes(option.value),
         })),
       },
     ];
