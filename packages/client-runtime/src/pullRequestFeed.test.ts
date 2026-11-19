@@ -14,6 +14,7 @@ import {
   pullRequestFeedRule,
   pullRequestFeedShows,
   pullRequestFeedRuleRows,
+  pullRequestFeedRuleTargets,
   type PullRequestFeedGroup,
   type PullRequestFeedRuleEnvironment,
 } from "./pullRequestFeed.ts";
@@ -286,6 +287,32 @@ describe("pull request feed rule rows", () => {
       status: "Differs: All pull requests on laptop; Hidden on server.",
       canReset: true,
     });
+  });
+
+  it("leaves an outdated server's fallback out of the comparison but keeps its note", () => {
+    const [row] = rows([project("laptop", "web", "k"), project("old", "web", "k")], {
+      laptop: { settings: settings("all", { web: "hidden" }) },
+      old: { settings: settings("all"), capable: false },
+    });
+    expect(row).toMatchObject({ rule: "hidden", status: "Update old to change it." });
+  });
+
+  it("writes a pick only to writable copies not already on it", () => {
+    const [row] = rows(
+      [project("laptop", "web", "k"), project("server", "web", "k"), project("mac", "web", "k")],
+      {
+        laptop: { settings: settings("all") },
+        server: { settings: settings("all", { web: "authored" }) },
+        mac: { settings: settings("hidden"), connected: false },
+      },
+    );
+    // Picking the rule the laptop copy inherits must not pin it there.
+    expect(pullRequestFeedRuleTargets(row!, "all").map((copy) => copy.environmentId)).toEqual([
+      "server",
+    ]);
+    expect(pullRequestFeedRuleTargets(row!, null).map((copy) => copy.environmentId)).toEqual([
+      "server",
+    ]);
   });
 
   it("says which copies this client cannot change and resets only writable ones", () => {

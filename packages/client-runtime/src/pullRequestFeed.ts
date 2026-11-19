@@ -346,18 +346,22 @@ export function pullRequestFeedRuleRows<
       });
   }
   const rows = [...groups].map(([key, { name, copies }]) => {
-    const rules = unique(copies.map((copy) => copy.rule)) as PullRequestFeedRule[];
+    // An outdated server reports its decoded fallback, not a stored rule; its note says so.
+    const stored = copies.some((copy) => copy.access !== "outdated")
+      ? copies.filter((copy) => copy.access !== "outdated")
+      : copies;
+    const rules = unique(stored.map((copy) => copy.rule)) as PullRequestFeedRule[];
     const rule = rules.length === 1 ? rules[0]! : null;
     const notes: string[] = [];
     if (rule === null) {
       const parts = rules.map((candidate) => {
         const on = unique(
-          copies.filter((copy) => copy.rule === candidate).map((copy) => copy.environmentLabel),
+          stored.filter((copy) => copy.rule === candidate).map((copy) => copy.environmentLabel),
         );
         return `${ruleLabel(candidate)} on ${on.join(", ")}`;
       });
       notes.push(`Differs: ${parts.join("; ")}.`);
-    } else if (copies.every((copy) => !copy.overridden)) {
+    } else if (stored.every((copy) => !copy.overridden)) {
       notes.push("Default rule.");
     }
     for (const access of ["disconnected", "outdated", "read-only"] as const) {
@@ -389,4 +393,19 @@ export function pullRequestFeedRuleRows<
     };
   });
   return rows.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * The projects a pick writes: a rule goes to each writable copy not already on it, so a copy that
+ * inherits the rule keeps following the default; a reset (`null`) clears each writable override.
+ */
+export function pullRequestFeedRuleTargets<Project>(
+  row: Pick<PullRequestFeedRuleRow<Project>, "copies">,
+  rule: PullRequestFeedRule | null,
+): ReadonlyArray<Project> {
+  return row.copies.flatMap((copy) =>
+    copy.access === "writable" && (rule === null ? copy.overridden : copy.rule !== rule)
+      ? [copy.project]
+      : [],
+  );
 }
