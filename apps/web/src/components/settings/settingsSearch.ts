@@ -378,6 +378,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "weekly-usage-style",
+    title: "Weekly usage style",
+    to: "/settings/appearance",
+    searchTerms: ["thread details weekly usage limits lines bars rings circles quota providers"],
+  },
+  {
     id: "effort-display",
     title: msg("Effort display"),
     to: "/settings/appearance",
