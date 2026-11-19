@@ -30,25 +30,24 @@ export function ThreadDetailsWeeklyUsage() {
   const style = useClientSettings((settings) => settings.threadDetailsWeeklyUsageStyle);
   const nowMinute = useNowMinute();
   const now = Date.parse(`${nowMinute}:00Z`);
-  const rings = collectLimitPools(collectLimitAccounts(presentations), now)
-    .flatMap((pool) => {
-      const provider = providerClients.get(pool.driver)?.label ?? String(pool.driver);
-      const color = barColor(pool.driver);
-      return displayLimitWindows(pool)
-        .filter((window) => window.kind === "weekly")
-        .map((window, index) => ({
-          key: `${pool.driver}:${window.id}`,
-          // "Weekly · Fable" and "Go · Weekly" keep their qualifier; plain "Weekly" names the provider.
-          name: window.label.replace(/^Weekly\s*·\s*|\s*·\s*Weekly$|^Weekly$/i, "") || provider,
-          title: `${provider} ${window.label}`,
-          // A provider's extra weekly windows turn its hue so each ring reads apart.
-          color: index === 0 ? color : `oklch(from ${color} l c calc(h + ${45 * index}))`,
-          left: Math.max(0, Math.min(100, window.remainingPercent)),
-          window,
-        }));
-    })
-    // lean: more than four rings leave no room in the center; revisit if a fifth weekly pool matters.
-    .slice(0, MAX_RINGS);
+  const windows = collectLimitPools(collectLimitAccounts(presentations), now).flatMap((pool) => {
+    const provider = providerClients.get(pool.driver)?.label ?? String(pool.driver);
+    const color = barColor(pool.driver);
+    return displayLimitWindows(pool)
+      .filter((window) => window.kind === "weekly")
+      .map((window, index) => ({
+        key: `${pool.driver}:${window.id}`,
+        // "Weekly · Fable" and "Go · Weekly" keep their qualifier; plain "Weekly" names the provider.
+        name: window.label.replace(/^Weekly\s*·\s*|\s*·\s*Weekly$|^Weekly$/i, "") || provider,
+        title: `${provider} ${window.label}`,
+        // A provider's extra weekly windows turn its hue so each ring reads apart.
+        color: index === 0 ? color : `oklch(from ${color} l c calc(h + ${45 * index}))`,
+        left: Math.max(0, Math.min(100, window.remainingPercent)),
+        window,
+      }));
+  });
+  // lean: more than four rings leave no room in the center; revisit if a fifth weekly pool matters.
+  const rings = style === "rings" ? windows.slice(0, MAX_RINGS) : windows;
   if (rings.length === 0) return null;
 
   const tooltip = (ring: (typeof rings)[number]) => {
