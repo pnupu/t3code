@@ -28,18 +28,20 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          read -r state turned_off < <(gh api "repos/$GH_REPO/actions/workflows/fork-release.yml" \
+          workflow=$(gh api "repos/$GH_REPO/actions/workflows/fork-release.yml" \
             --jq '"\(.state) \(.updated_at)"')
+          read -r state updated_at <<< "$workflow"
           if [[ "$state" != active ]]; then
-            echo "::warning::fork-release.yml was $state since $turned_off; turning it on."
+            echo "::warning::fork-release.yml was $state (updated_at $updated_at); turning it on."
             gh workflow enable fork-release.yml
           elif [[ "$GITHUB_EVENT_NAME" == push ]]; then
             echo "fork-release.yml is on, so this push starts it."
             exit 0
           fi
           head=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
-          # Any run on HEAD counts, also a failed one: a failed release opens a fork-sync issue.
-          if [[ "$(gh run list --workflow fork-release.yml --commit "$head" --limit 1 --json databaseId --jq length)" != 0 ]]; then
+          # A failed run counts, since a failed release opens a fork-sync issue; a cancelled one does not.
+          if [[ "$(gh run list --workflow fork-release.yml --commit "$head" --limit 20 --json conclusion \
+              --jq '[.[] | select(.conclusion != "cancelled")] | length')" != 0 ]]; then
             echo "fork-release.yml already ran on $head."
             exit 0
           fi
