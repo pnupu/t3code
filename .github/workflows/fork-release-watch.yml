@@ -40,8 +40,9 @@ jobs:
           fi
           head=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
           # A failed run counts, since a failed release opens a fork-sync issue; a cancelled one does not.
-          if [[ "$(gh run list --workflow fork-release.yml --commit "$head" --limit 20 --json conclusion \
-              --jq '[.[] | select(.conclusion != "cancelled")] | length')" != 0 ]]; then
+          runs=$(gh run list --workflow fork-release.yml --commit "$head" --limit 20 --json conclusion \
+            --jq '[.[] | select(.conclusion != "cancelled")] | length')
+          if [[ "$runs" != 0 ]]; then
             echo "fork-release.yml already ran on $head."
             exit 0
           fi
