@@ -508,6 +508,17 @@ describe("evaluatePullRequestWatch", () => {
         approvalUnknown: true,
       },
     ]);
+    // A first read with an unread approval lookup still saw the checks, so their finish is news.
+    const blind = evaluatePullRequestWatch(
+      watch({ awaitingBaseline: "all" }),
+      detail({ checks: [...second.checks, unavailable] }),
+      noRemarks,
+    );
+    assert.deepEqual(blind.changes, []);
+    assert.deepEqual(
+      evaluatePullRequestWatch(blind.next, detail({ checks: reviewed }), noRemarks).changes,
+      settled.changes,
+    );
     // A watch saved before finished names were kept learns them without waking.
     const { finishedChecks: _legacy, ...legacy } = settled.next;
     assert.deepEqual(

@@ -4928,10 +4928,13 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         yield* reopen("push-pending");
         assert.isUndefined(yield* checksPending);
 
+        // The finished check is news even without the cleared answer, as the test check failed.
         e2e = "success";
         yield* TestClock.adjust("10 minutes");
         yield* reactor.sweep;
-        assert.deepEqual(yield* summaries, []);
+        assert.deepEqual(yield* summaries, [
+          "#17: checks finished with failures; #18: checks finished with failures",
+        ]);
         assert.isFalse(yield* checksPending);
 
         // A push clears the answer while a read with news is in flight. That read's answer is the
@@ -4960,7 +4963,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         gate = null;
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(inFlight);
-        assert.lengthOf(yield* summaries, 1);
+        assert.lengthOf(yield* summaries, 2);
         assert.isUndefined(yield* checksPending);
 
         // The next sweep reads it again though nothing on the host changed.
