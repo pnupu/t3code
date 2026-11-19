@@ -265,6 +265,8 @@ function involvementArgs(input: {
       return ["--creator", input.viewer];
     case "reviewing":
       return ["--reviewer", input.viewer];
+    // Azure DevOps has no filter for every pull request the viewer takes part in; see `listsInvolved`.
+    case "involved":
     case "all":
       return [];
   }

@@ -919,12 +919,18 @@ function matchesUnsortedListing(
 ): boolean {
   const matchesState = input.state === "all" || item.state === input.state;
   const viewer = input.viewer.toLowerCase();
+  const authored = item.author?.login.toLowerCase() === viewer;
+  const reviewing =
+    item.hasTeamReviewRequest ||
+    item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer);
+  // The listing has no comments, mentions, or assignees, so `involved` keeps only what it can see.
   const matchesInvolvement =
     input.involvement === "all" ||
     (input.involvement === "authored"
-      ? item.author?.login.toLowerCase() === viewer
-      : item.hasTeamReviewRequest ||
-        item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer));
+      ? authored
+      : input.involvement === "reviewing"
+        ? reviewing
+        : authored || reviewing);
   return matchesState && matchesInvolvement && matchesFilters(item, input.filters, input.viewer);
 }
 
@@ -951,6 +957,7 @@ function searchQuery(input: {
     ...(input.state === "merged" ? ["is:merged"] : []),
     ...(input.involvement === "authored" ? [`author:${input.viewer}`] : []),
     ...(input.involvement === "reviewing" ? [`review-requested:${input.viewer}`] : []),
+    ...(input.involvement === "involved" ? [`involves:${input.viewer}`] : []),
     ...(query.length === 0 ? [] : [searchPhrase(query)]),
     ...(input.cursor === undefined ? [] : [`updated:<=${input.cursor.updatedBefore}`]),
     ...filterQualifiers(input.filters, input.viewer),

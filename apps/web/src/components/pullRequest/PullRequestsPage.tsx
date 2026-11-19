@@ -431,6 +431,18 @@ export function PullRequestsPage() {
     },
   }));
   const partitionsWanted = search.involvement === "all" && typedQuery.length === 0;
+  // Only a server that stores the `involved` rule can hold a project on it, so older servers and
+  // feeds without the rule never get this read.
+  const involvedEnvironments = new Set(
+    scopedProjectId !== undefined
+      ? []
+      : projects.flatMap((project) =>
+          feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
+          "involved"
+            ? [project.environmentId]
+            : [],
+        ),
+  );
   const partitionTargets = (() => {
     // The main list goes first. Besides putting the visible rows on screen sooner, it proves
     // which repositories the host search indexes, so an empty partition does not trigger the
@@ -440,10 +452,10 @@ export function PullRequestsPage() {
       baselineQuery.data === null ||
       baselineQuery.data.entries.length === 0
     ) {
-      return { authored: NO_LIST_TARGETS, reviewing: NO_LIST_TARGETS };
+      return { authored: NO_LIST_TARGETS, reviewing: NO_LIST_TARGETS, involved: NO_LIST_TARGETS };
     }
-    const targetsFor = (involvement: PullRequestInvolvement) =>
-      environmentQueries.map(({ environmentId, projectIds }) => ({
+    const targetsFor = (involvement: PullRequestInvolvement, queries = environmentQueries) =>
+      queries.map(({ environmentId, projectIds }) => ({
         environmentId,
         input: {
           state: search.state,
@@ -455,10 +467,18 @@ export function PullRequestsPage() {
           ...(menuFiltered ? { filters: menuFilters } : {}),
         } satisfies PullRequestListInput,
       }));
-    return { authored: targetsFor("authored"), reviewing: targetsFor("reviewing") };
+    return {
+      authored: targetsFor("authored"),
+      reviewing: targetsFor("reviewing"),
+      involved: targetsFor(
+        "involved",
+        environmentQueries.filter(({ environmentId }) => involvedEnvironments.has(environmentId)),
+      ),
+    };
   })();
   const authoredQuery = usePullRequestHostList(partitionTargets.authored);
   const reviewingQuery = usePullRequestHostList(partitionTargets.reviewing);
+  const involvedQuery = usePullRequestHostList(partitionTargets.involved);
   const invalidate = useAtomCommand(pullRequestEnvironment.invalidate, { reportFailure: false });
   const [detailRefreshToken, setDetailRefreshToken] = useState(0);
   const [invalidating, setInvalidating] = useState(false);
@@ -702,6 +722,7 @@ export function PullRequestsPage() {
             ...facetTargets,
             ...partitionTargets.authored,
             ...partitionTargets.reviewing,
+            ...partitionTargets.involved,
           ]
         : []
     ).filter(
@@ -756,6 +777,9 @@ export function PullRequestsPage() {
   );
   const shownHeldAuthored = usePendingListEntries(overlayInput, heldPartitions?.authored);
   const shownHeldReviewing = usePendingListEntries(overlayInput, heldPartitions?.reviewing);
+  const involvedUrls = new Set(
+    (partitionsWanted ? involvedQuery.data?.entries : undefined)?.map((entry) => entry.url),
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHidden, setShowHidden] = useState(false);
   // Only copies in the list's scope: a row shows when any of their rules allows it.
@@ -805,6 +829,7 @@ export function PullRequestsPage() {
       rulesFor,
       hidden: feed.hidden,
       repositoryHidden: feed.repositoryHidden,
+      involved: (entry) => involvedUrls.has(entry.url),
       showHidden,
     },
   });

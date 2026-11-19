@@ -795,6 +795,8 @@ function involvementParams(input: {
       return [["author_username", input.viewer]];
     case "reviewing":
       return [["reviewer_username", input.viewer]];
+    // GitLab has no filter for every merge request the viewer takes part in; see `listsInvolved`.
+    case "involved":
     case "all":
       return [];
   }

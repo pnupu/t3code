@@ -1,5 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
-import { DEFAULT_SERVER_SETTINGS, ProjectId, type PullRequestFeedRule } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProjectId,
+  type PullRequestFeedRule,
+  type PullRequestInvolvement,
+} from "@t3tools/contracts";
 
 import {
   filterPullRequestFeed,
@@ -20,7 +25,7 @@ const projectA = ProjectId.make("project-a");
 const projectB = ProjectId.make("project-b");
 
 describe("pull request feed rules", () => {
-  it.each<[PullRequestFeedRule, PullRequestFeedGroup, "all" | "authored" | "reviewing", boolean]>([
+  it.each<[PullRequestFeedRule, PullRequestFeedGroup, PullRequestInvolvement, boolean, boolean?]>([
     ["all", "others", "all", true],
     ["hidden", "authored", "all", false],
     ["authored", "authored", "all", true],
@@ -33,8 +38,15 @@ describe("pull request feed rules", () => {
     ["authored", "others", "reviewing", false],
     ["reviewing", "others", "reviewing", true],
     ["reviewing", "others", "authored", false],
-  ])("%s shows a %s row under %s: %s", (rule, group, involvement, shown) => {
-    expect(pullRequestFeedShows(rule, group, involvement)).toBe(shown);
+    ["involved", "authored", "all", true],
+    ["involved", "reviewRequested", "all", true],
+    ["involved", "others", "all", false],
+    // The host's involved listing holds the row: a comment, mention, or assignment.
+    ["involved", "others", "all", true, true],
+    ["involved", "others", "involved", true],
+    ["involved", "others", "authored", true],
+  ])("%s shows a %s row under %s: %s", (rule, group, involvement, shown, involved) => {
+    expect(pullRequestFeedShows(rule, group, involvement, involved)).toBe(shown);
   });
 
   it("resolves a project override over the environment rule", () => {
@@ -90,11 +102,15 @@ describe("pull request feed rules", () => {
     });
   });
 
-  it.each<[string, PullRequestFeedRule, PullRequestFeedGroup, PullRequestFeedGroup, boolean]>([
+  it.each<
+    [string, PullRequestFeedRule, PullRequestFeedGroup, PullRequestFeedGroup, boolean, boolean?]
+  >([
     ["admits a row its own group admits", "authored", "others", "authored", true],
     ["admits a row its list group admits", "reviewing", "reviewRequested", "others", true],
     ["drops a row neither group admits", "authored", "others", "reviewRequested", false],
-  ])("%s", (_, rule, listGroup, ownGroup, shown) => {
+    ["admits an Others row the host lists as involved", "involved", "others", "others", true, true],
+    ["drops an Others row the host does not list", "involved", "others", "others", false, false],
+  ])("%s", (_, rule, listGroup, ownGroup, shown, involved) => {
     expect(
       pullRequestFeedVisibility({ url: "https://h/a/1" }, listGroup, {
         scopedToProject: false,
@@ -102,6 +118,7 @@ describe("pull request feed rules", () => {
         rulesFor: () => [rule],
         hidden: new Set(),
         groupOf: () => ownGroup,
+        involved: () => involved === true,
       }),
     ).toBe(shown ? "shown" : "rule");
   });

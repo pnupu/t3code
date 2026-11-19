@@ -2639,6 +2639,44 @@ it.effect("shares one cold viewer lookup across distinct concurrent lists", () =
   }),
 );
 
+it.effect("reads `involved` as every row on a host that cannot narrow it", () =>
+  Effect.gen(function* () {
+    const asked: string[] = [];
+    const service = yield* makeService({
+      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
+      providers: [
+        fakePullRequestProvider(SourceControlProviderKind.make("github"), {
+          getViewer: () => Effect.succeed("bilal"),
+          listChangeRequests: (input) =>
+            Effect.sync(() => {
+              asked.push(input.involvement);
+              return {
+                items: [
+                  { ...changeRequest(1, "2026-07-03T00:00:00Z"), author: null },
+                  {
+                    ...changeRequest(2, "2026-07-02T00:00:00Z"),
+                    author: { login: "Bilal", name: null, avatarUrl: null },
+                  },
+                  { ...changeRequest(3, "2026-07-01T00:00:00Z"), reviewRequestLogins: ["bilal"] },
+                ],
+                truncated: false,
+                continues: true,
+              };
+            }),
+        }),
+      ],
+    });
+
+    const result = yield* service.list({ state: "open", involvement: "involved" });
+
+    assert.deepStrictEqual(asked, ["all"]);
+    assert.deepStrictEqual(
+      result.entries.map((entry) => entry.number),
+      [2, 3],
+    );
+  }),
+);
+
 it.effect("a listing narrowed to some projects is its own cache entry", () =>
   Effect.gen(function* () {
     const asked: ReadonlyArray<string>[] = [];

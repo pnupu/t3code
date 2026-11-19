@@ -5,7 +5,10 @@ import {
   managedRuntimeModeDenial,
 } from "@t3tools/contracts";
 import { createModelSelection, pickModelSelection } from "@t3tools/shared/model";
-import { PULL_REQUEST_FEED_RULES } from "@t3tools/client-runtime/pull-request-feed";
+import {
+  PULL_REQUEST_FEED_RULES,
+  pullRequestFeedRuleOptions,
+} from "@t3tools/client-runtime/pull-request-feed";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -109,6 +112,9 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   // Older servers drop the rule, so offer it only where every selected server stores it.
   const pullRequestFeedSupported = connectedEnvironments.every(
     (environment) => environment.serverConfig?.environment.capabilities.pullRequestFeed === true,
+  );
+  const pullRequestFeedRules = pullRequestFeedRuleOptions(
+    connectedEnvironments.map((environment) => environment.serverConfig?.environment.capabilities),
   );
   const modelSource = useScopedSettingSource(["defaultModelSelection"]);
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
@@ -549,7 +555,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 <Select
                   value={mixedPullRequestFeed ? null : settings.pullRequestFeed}
                   onValueChange={(value) => {
-                    const rule = PULL_REQUEST_FEED_RULES.find((option) => option.value === value);
+                    const rule = pullRequestFeedRules.find((option) => option.value === value);
                     if (rule) updateSettings({ pullRequestFeed: rule.value });
                   }}
                 >
@@ -562,7 +568,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                     </SelectValue>
                   </SelectTrigger>
                   <SelectPopup align="end" alignItemWithTrigger={false}>
-                    {PULL_REQUEST_FEED_RULES.map((option) => (
+                    {pullRequestFeedRules.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>

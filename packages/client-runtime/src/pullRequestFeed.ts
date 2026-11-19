@@ -18,10 +18,23 @@ export const PULL_REQUEST_FEED_RULES: ReadonlyArray<{
   readonly label: string;
 }> = [
   { value: "all", label: "All pull requests" },
+  { value: "involved", label: "Involving me" },
   { value: "reviewing", label: "Waiting on me" },
   { value: "authored", label: "Authored by me" },
   { value: "hidden", label: "Hidden" },
 ];
+
+/** The rules every server to write can store; servers without `pullRequestFeedInvolved` refuse it. */
+export function pullRequestFeedRuleOptions(
+  capabilities: Iterable<{ readonly pullRequestFeedInvolved?: boolean } | undefined>,
+): typeof PULL_REQUEST_FEED_RULES {
+  for (const capability of capabilities) {
+    if (capability?.pullRequestFeedInvolved !== true) {
+      return PULL_REQUEST_FEED_RULES.filter((option) => option.value !== "involved");
+    }
+  }
+  return PULL_REQUEST_FEED_RULES;
+}
 
 export function pullRequestFeedRule(
   settings: PullRequestFeedSettings | null | undefined,
@@ -42,11 +55,15 @@ export function pullRequestFeedGroup(
   return entry.viewerReviewRequested ? "reviewRequested" : "others";
 }
 
-/** A narrowed involvement tab holds one group of that kind, whatever its key says. */
+/**
+ * A narrowed involvement tab holds one group of that kind, whatever its key says. `involved` says
+ * the host lists the viewer as taking part in an Others row, by a comment, mention, or assignment.
+ */
 export function pullRequestFeedShows(
   rule: PullRequestFeedRule,
   group: PullRequestFeedGroup,
   involvement: PullRequestInvolvement = "all",
+  involved = false,
 ): boolean {
   const kind =
     involvement === "authored"
@@ -59,6 +76,8 @@ export function pullRequestFeedShows(
       return true;
     case "hidden":
       return false;
+    case "involved":
+      return kind !== "others" || involved || involvement === "involved";
     case "authored":
       return kind === "authored";
     case "reviewing":
@@ -104,6 +123,8 @@ export interface PullRequestFeedOptions<Entry> {
   readonly hidden: ReadonlySet<string>;
   /** The row's own group, when the list may file it under another one. */
   readonly groupOf?: (entry: Entry) => PullRequestFeedGroup;
+  /** Whether the host's `involved` listing holds the row; absent counts only the row's group. */
+  readonly involved?: (entry: Entry) => boolean;
   /** A repository another environment's project hides, read before copies merge. */
   readonly repositoryHidden?: (entry: Entry) => boolean;
 }
@@ -191,9 +212,13 @@ export function pullRequestFeedVisibility<Entry extends { readonly url: string }
     const admitted =
       options.repositoryHidden?.(entry) !== true &&
       options.rulesFor(entry).some((rule) => {
-        if (pullRequestFeedShows(rule, group, options.involvement)) return true;
+        const involved = rule === "involved" && options.involved?.(entry) === true;
+        if (pullRequestFeedShows(rule, group, options.involvement, involved)) return true;
         ownGroup ??= options.groupOf?.(entry);
-        return ownGroup !== undefined && pullRequestFeedShows(rule, ownGroup, options.involvement);
+        return (
+          ownGroup !== undefined &&
+          pullRequestFeedShows(rule, ownGroup, options.involvement, involved)
+        );
       });
     if (!admitted) return "rule";
   }

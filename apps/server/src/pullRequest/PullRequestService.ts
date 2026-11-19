@@ -546,6 +546,7 @@ function withRateLimitBackoff(
       ? {}
       : { readsPublicHostWithoutCheckout: api.readsPublicHostWithoutCheckout }),
     ...(api.batchesReads === undefined ? {} : { batchesReads: api.batchesReads }),
+    ...(api.listsInvolved === undefined ? {} : { listsInvolved: api.listsInvolved }),
     getViewer:
       options?.viewerAllowsPause === true
         ? interactive("getViewer", api.getViewer)
@@ -1436,6 +1437,14 @@ export const make = Effect.gen(function* () {
     const cursorOf = (project: SupportedProject): ListCursor | undefined =>
       continuation?.get(project.cursorKey);
 
+    // lean: a host that cannot narrow `involved` is read as `all` and narrowed here, which can
+    // leave a short page. Revisit if pages on those hosts come back sparse.
+    const narrowsInvolved = (project: SupportedProject) =>
+      involvement === "involved" && project.api.listsInvolved !== true;
+    const involvesViewer = (item: ProviderChangeRequest, viewer: string) =>
+      item.author?.login.toLowerCase() === viewer.toLowerCase() ||
+      item.reviewRequestLogins.some((login) => login.toLowerCase() === viewer.toLowerCase());
+
     const readSlice = (
       project: SupportedProject,
       cursor: ListCursor | undefined,
@@ -1443,13 +1452,14 @@ export const make = Effect.gen(function* () {
       {
         const viewer = viewers[project.host]!;
         const key = project.cursorKey;
+        const narrowed = narrowsInvolved(project);
         return project.api
           .listChangeRequests({
             cwd: project.project.workspaceRoot,
             repository: project.repository,
             host: project.host,
             state: input.state,
-            involvement,
+            involvement: narrowed ? "all" : involvement,
             viewer,
             limit,
             query: input.query,
@@ -1482,7 +1492,11 @@ export const make = Effect.gen(function* () {
               return {
                 key,
                 entries: items
-                  .filter((item) => matchesRowFilters(item, input.filters, viewer))
+                  .filter(
+                    (item) =>
+                      matchesRowFilters(item, input.filters, viewer) &&
+                      (!narrowed || involvesViewer(item, viewer)),
+                  )
                   .map((item) => toEntry({ project, item, viewer, observedAt })),
                 errors: [],
                 truncated: page.truncated,
@@ -1553,7 +1567,7 @@ export const make = Effect.gen(function* () {
       const readAcross = first.api.listChangeRequestsAcross;
       const separately = () =>
         Effect.forEach(chunk, readRepository, { concurrency: REPOSITORY_CONCURRENCY });
-      if (readAcross === undefined) return separately();
+      if (readAcross === undefined || narrowsInvolved(first)) return separately();
       const viewer = viewers[first.host]!;
       const cursor = cursorOf(first);
       return readAcross({

@@ -5,6 +5,7 @@ import {
   isPullRequestHidden,
   PULL_REQUEST_FEED_RULES,
   pullRequestFeedRule,
+  pullRequestFeedRuleOptions,
   pullRequestProjectHidesRepository,
   pullRequestRepositoryHidden,
   pullRequestRepositoryRules,
@@ -76,6 +77,9 @@ export function usePullRequestFeed() {
     );
   // A repository one environment hides leaves every environment's copy, including carried rows.
   const repositoryHidden = pullRequestRepositoryHidden(projects, hidesRepository);
+  const capabilitiesOf = (environmentId: EnvironmentId) =>
+    environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
+      ?.environment.capabilities;
   /** Every connected copy's rule counts, so the same settings give the same feed on any device. */
   const ruleCounts = (environmentId: EnvironmentId) =>
     connected.has(environmentId) &&
@@ -177,7 +181,9 @@ export function usePullRequestFeed() {
         id: "rule:all",
         label: `Feed for ${entry.projectTitle}`,
         disabled: members.length === 0,
-        children: PULL_REQUEST_FEED_RULES.map((option) => ({
+        children: pullRequestFeedRuleOptions(
+          members.map((member) => capabilitiesOf(member.environmentId)),
+        ).map((option) => ({
           id: `rule:${option.value}` as const,
           label: option.label,
           checked: rules.includes(option.value),

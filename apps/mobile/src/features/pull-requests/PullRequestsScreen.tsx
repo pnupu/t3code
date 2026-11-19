@@ -171,6 +171,34 @@ export function PullRequestsScreen(
     [environments, environmentId, configs, controls, query],
   );
   const result = usePullRequestList(targets);
+  const feed = usePullRequestFeed();
+  // As on web: only environments with a project on the `involved` rule read that listing.
+  const involvedEnvironmentIds = controls.projectId
+    ? ""
+    : [
+        ...new Set(
+          allProjects.flatMap((project) =>
+            feed.ruleFor({ environmentId: project.environmentId, projectId: project.id }) ===
+            "involved"
+              ? [project.environmentId]
+              : [],
+          ),
+        ),
+      ].join("\n");
+  const involvedTargets = useMemo(
+    () =>
+      controls.involvement !== "all"
+        ? []
+        : targets.flatMap((target) =>
+            involvedEnvironmentIds.split("\n").includes(target.environmentId)
+              ? [{ ...target, input: { ...target.input, involvement: "involved" as const } }]
+              : [],
+          ),
+    [controls.involvement, involvedEnvironmentIds, targets],
+  );
+  const involvedUrls = new Set(
+    usePullRequestList(involvedTargets).entries.map((entry) => entry.url),
+  );
   const connectedTargets = targets.filter((target) =>
     environments.some(
       (environment) =>
@@ -198,7 +226,6 @@ export function PullRequestsScreen(
       ),
     [result.entries, controls, query, result.data, connectedKey],
   );
-  const feed = usePullRequestFeed();
   const [showHidden, setShowHidden] = useState(false);
   const viewers = result.data?.viewers ?? {};
   const repositoryHidden = pullRequestRepositoryHidden(allProjects, feed.hidesRepository);
@@ -221,6 +248,7 @@ export function PullRequestsScreen(
         rulesFor,
         hidden: feed.hidden,
         repositoryHidden,
+        involved: (row) => involvedUrls.has(row.url),
       },
     ),
   );

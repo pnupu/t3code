@@ -42,7 +42,7 @@ import {
 } from "./settings-scoped-server";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import { usePullRequestFeed } from "../pull-requests/usePullRequestFeed";
-import { PULL_REQUEST_FEED_RULES } from "@t3tools/client-runtime/pull-request-feed";
+import { pullRequestFeedRuleOptions } from "@t3tools/client-runtime/pull-request-feed";
 import { AutoSettleSettingsRows } from "./ThreadSettingsSections";
 import { supportsSharedSettingsSync } from "@t3tools/client-runtime/state/shared-settings";
 import { isSourceControlProviderOffered } from "@t3tools/client-runtime/operations/projects";
@@ -469,7 +469,11 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       ) : null
                     }
                   >
-                    {PULL_REQUEST_FEED_RULES.map((option, index) => (
+                    {pullRequestFeedRuleOptions(
+                      targets.map(
+                        (target) => target.environment.serverConfig.environment.capabilities,
+                      ),
+                    ).map((option, index) => (
                       <SettingsChoiceRow
                         key={option.value}
                         label={option.label}

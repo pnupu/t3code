@@ -1563,6 +1563,20 @@ layer("GitHubPullRequestApi.layer", (it) => {
         'is:pr is:closed is:unmerged review-requested:bilal "pull requests page" ' +
           "updated:<=2026-07-02T00:00:00Z sort:updated-desc repo:acme/web repo:pingdotgg/t3code",
       );
+
+      yield* cli.searchPullRequests({
+        cwd: "/w",
+        host: "github.com",
+        repositories: ["acme/web"],
+        state: "open",
+        involvement: "involved",
+        viewer: "bilal",
+        limit: 10,
+      });
+      assert.strictEqual(
+        searchQueryOfCall(1),
+        "is:pr is:open involves:bilal sort:updated-desc repo:acme/web",
+      );
     }),
   );
 
