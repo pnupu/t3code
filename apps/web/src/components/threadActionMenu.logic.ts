@@ -3,12 +3,15 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "../i18n/messages";
+import { threadMoveMenuItems, type ThreadMoveTarget } from "./threadProjectMove";
 
 export type ThreadActionMenuId =
   | "find"
   | "new-thread-on-branch"
   | "filter-by-project"
   | "turn-into-project"
+  | "move-to-project"
+  | `move-to-project:${string}`
   | "project-settings"
   | "pin"
   | "unpin"
@@ -127,6 +130,7 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  readonly moveTargets?: ReadonlyArray<ThreadMoveTarget>;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -260,6 +264,7 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
+    ...threadMoveMenuItems(state.moveTargets, state.isRunning),
     ...(state.supports.autoSettleOptOut
       ? [
           {

@@ -242,6 +242,8 @@ import {
   useActiveRowReveal,
 } from "./sidebar/routeReveal";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { movedToProjectId, threadMoveTargets } from "./threadProjectMove";
+import { useMoveThreadToProject } from "../hooks/useMoveThreadToProject";
 import { titleRegenerationToast } from "./threadTitleRegenerationToast";
 import { copyThreadReference } from "../lib/copyThreadReference";
 import { threadChipCopyTarget } from "@t3tools/client-runtime/thread-reference";
@@ -970,6 +972,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
+  const moveThreadToProject = useMoveThreadToProject();
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onError: (error) => {
       toastManager.add(
@@ -2716,6 +2719,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 projectRef.projectId === thread.projectId,
             ),
           ) ?? null;
+        const moveTargets = threadMoveTargets({
+          thread,
+          projects,
+          config: serverConfigs.get(thread.environmentId),
+        });
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
@@ -2745,6 +2753,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              moveTargets,
               canRename: !fromSearch,
               supports: {
                 settlement: configLoaded,
@@ -2778,6 +2787,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           if (preset) attemptSnooze(threadRef, preset);
           return;
         }
+        const moveTo = movedToProjectId(clicked.value, moveTargets);
+        if (moveTo !== null) return void moveThreadToProject(threadRef, moveTo);
         switch (clicked.value) {
           case "filter-by-project":
             if (threadProjectGroup) {

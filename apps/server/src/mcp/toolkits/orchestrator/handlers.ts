@@ -11,6 +11,7 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ThreadMetadataMcpService from "../../ThreadMetadataMcpService.ts";
+import { refuseScratchMoveTarget } from "../../threadMoveTarget.ts";
 
 const handlers = {
   orchestrator_capabilities: McpToolAccess.reads((input) =>
@@ -171,6 +172,7 @@ const handlers = {
       Effect.gen(function* () {
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const service = yield* ThreadMetadataMcpService.ThreadMetadataMcpService;
+        yield* refuseScratchMoveTarget(input.projectId);
         return yield* service.update(scope, input);
       }),
   ),
