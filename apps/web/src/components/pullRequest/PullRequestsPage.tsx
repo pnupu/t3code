@@ -886,13 +886,14 @@ export function PullRequestsPage() {
   const readStatsProgress = useEffectEvent(() => ({
     statsByRow,
     pending: statsQuery.isPending,
+    target: statsTargetState,
   }));
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- queues eager stats batches for the rows, reading known stats and visible keys held outside render
   useEffect(() => {
     if (statsPolicy !== "eager") return;
-    const { statsByRow: known } = readStatsProgress();
+    const { statsByRow: known, target } = readStatsProgress();
     const candidateKeys = visibleStatsKeys.current.values;
-    setStatsTargetState((current) => {
+    const addedTo = (current: typeof target) => {
       const batches = current.key === filterKey ? current.batches : [];
       const added = pullRequestStatsRequestBatches({
         entriesByKey: entriesByStatsKey,
@@ -901,9 +902,13 @@ export function PullRequestsPage() {
         activeBatches: batches,
         statsByRow: known,
       });
-      if (added.length === 0 && current.key === filterKey) return current;
-      return { key: filterKey, batches: [...batches, ...added] };
-    });
+      return added.length === 0 && current.key === filterKey
+        ? null
+        : { key: filterKey, batches: [...batches, ...added] };
+    };
+    // entriesByStatsKey can be new on every render, and even a no-op setter call re-renders.
+    if (addedTo(target) === null) return;
+    setStatsTargetState((current) => addedTo(current) ?? current);
   }, [filterKey, entriesByStatsKey, statsPolicy]);
   // The observer outlives the rows it watches, so it reads the rows held at the time it fires.
   const readStatsRows = useEffectEvent(() => entriesByStatsKey);
@@ -1148,12 +1153,18 @@ export function PullRequestsPage() {
   const onGuideShown = () => setMaximized(true);
   // updateSearch leaves selectedUrl out, so a reload does not reveal the link again.
   const consumeLinkedUrl = useEffectEvent(() => updateSearch({}));
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the URL-linked pull request in the right panel store
-  useEffect(() => {
+  const openLinkedSelection = useEffectEvent(() => {
     if (!pullRequestsSupported || rightPanelRef === null || linkedSelection === null) return;
     useRightPanelStore.getState().openPullRequest(rightPanelRef, linkedSelection);
     if (linkedSelection.revealUrl !== undefined) consumeLinkedUrl();
-  }, [linkedSelection, pullRequestsSupported, rightPanelRef]);
+  });
+  // The selection object can be new on every render, and opening it re-renders the page.
+  const linkedSelectionKey = linkedSelection === null ? null : JSON.stringify(linkedSelection);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the URL-linked pull request in the right panel store
+  useEffect(() => {
+    openLinkedSelection();
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Keyed by content: a new object for the same link must not open it again.
+  }, [linkedSelectionKey, pullRequestsSupported, rightPanelRef]);
 
   const selected =
     rightPanelState.isOpen && activePullRequestSurface !== null
