@@ -178,6 +178,7 @@ import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as CodexManagedTokenBroker from "./provider/CodexManagedTokenBroker.ts";
 import * as WebhookRoute from "./scheduledTasks/webhookRoute.ts";
 import * as RelayDeliveryProof from "./scheduledTasks/RelayDeliveryProof.ts";
+import * as ThreadMoveTaskFollower from "./scheduledTasks/ThreadMoveTaskFollower.ts";
 import * as HeldHooksWaker from "./relay/HeldHooksWaker.ts";
 import * as McpOAuth from "./auth/McpOAuth.ts";
 import * as McpOAuthHttp from "./auth/mcpOAuthHttp.ts";
@@ -748,6 +749,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   layerThreadPullRequestWorker,
   KeepAwake.layer,
   DelegatedTaskAnalytics.layer,
+  ThreadMoveTaskFollower.layer,
   Layer.effectDiscard(
     Effect.gen(function* () {
       const service = yield* PullRequestSyncReactor.PullRequestSyncReactor;
