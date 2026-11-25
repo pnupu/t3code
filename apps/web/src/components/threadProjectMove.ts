@@ -3,7 +3,7 @@ import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import type { ContextMenuItem, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { msg } from "gt-react";
 
-import { m } from "../i18n/messages";
+import { m, type MessageResolver } from "../i18n/messages";
 
 export interface ThreadMoveTarget {
   readonly id: ProjectId;
@@ -44,12 +44,13 @@ export function threadMoveTargets(input: {
 export function threadMoveMenuItems(
   targets: ReadonlyArray<ThreadMoveTarget> | undefined,
   isRunning: boolean,
+  resolve: MessageResolver = m,
 ): ReadonlyArray<ContextMenuItem<"move-to-project" | `move-to-project:${string}`>> {
   if (targets === undefined || targets.length === 0) return [];
   return [
     {
       id: "move-to-project",
-      label: m(msg("Move to project…")),
+      label: resolve(msg("Move to project…")),
       icon: "folder",
       disabled: isRunning,
       children: targets.map((target) => ({

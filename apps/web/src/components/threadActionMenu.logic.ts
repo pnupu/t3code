@@ -264,7 +264,7 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
-    ...threadMoveMenuItems(state.moveTargets, state.isRunning),
+    ...threadMoveMenuItems(state.moveTargets, state.isRunning, resolve),
     ...(state.supports.autoSettleOptOut
       ? [
           {
